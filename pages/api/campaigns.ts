@@ -4,8 +4,8 @@ import { getDbPool } from '@/lib/db-mysql';
 import mysql from 'mysql2/promise';
 import crypto from 'crypto';
 
-interface CampaignInput { // Representa o que o frontend PODE enviar (pode ser parcial para PUT)
-    name?: string; // Name é opcional para PUT
+interface CampaignInput {
+    name?: string;
     platform?: string | string[] | null;
     objective?: string | string[] | null;
     budget?: number | string | null;
@@ -25,8 +25,6 @@ interface CampaignInput { // Representa o que o frontend PODE enviar (pode ser p
     cost_creative?: number | string | null;
     cost_operational?: number | string | null;
     user_id?: number | null;
-
-    // Campos que podem vir do frontend com camelCase
     targetAudience?: string | null;
     adFormat?: string | string[] | null;
     avgTicket?: number | null;
@@ -36,25 +34,25 @@ interface CampaignInput { // Representa o que o frontend PODE enviar (pode ser p
     endDate?: string | null;
 }
 
-interface CampaignDbRecord { // Representa a estrutura da tabela no DB (snake_case)
+interface CampaignDbRecord {
     id: string;
     name: string;
     user_id?: number | null;
-    platform?: string | null; // JSON stringificado
-    objective?: string | null; // JSON stringificado
+    platform?: string | null;
+    objective?: string | null;
     budget?: number | null;
     daily_budget?: number | null;
     duration?: number | null;
     industry?: string | null;
     target_audience?: string | null;
     segmentation?: string | null;
-    ad_format?: string | null; // JSON stringificado
+    ad_format?: string | null;
     avg_ticket?: number | null;
     purchase_frequency?: number | null;
     customer_lifespan?: number | null;
     status?: string | null;
-    start_date?: string | null; // Formato YYYY-MM-DD
-    end_date?: string | null;   // Formato YYYY-MM-DD
+    start_date?: string | null;
+    end_date?: string | null;
     cost_traffic?: number | null;
     cost_creative?: number | null;
     cost_operational?: number | null;
@@ -63,25 +61,25 @@ interface CampaignDbRecord { // Representa a estrutura da tabela no DB (snake_ca
 }
 
 
-interface CampaignResponse { // O que a API retorna (pode ser camelCase se o frontend preferir)
+interface CampaignResponse {
     id: string;
     name: string;
     user_id?: number | null;
-    platform?: string[] | null; // JSON parseado
-    objective?: string[] | null; // JSON parseado
+    platform?: string[] | null;
+    objective?: string[] | null;
     budget?: number | null;
     daily_budget?: number | null;
     duration?: number | null;
     industry?: string | null;
-    targetAudience?: string | null; // Mapeado de target_audience
+    targetAudience?: string | null;
     segmentation?: string | null;
-    adFormat?: string[] | null; // Mapeado de ad_format (JSON parseado)
-    avgTicket?: number | null; // Mapeado de avg_ticket
-    purchaseFrequency?: number | null; // Mapeado de purchase_frequency
-    customerLifespan?: number | null; // Mapeado de customer_lifespan
+    adFormat?: string[] | null;
+    avgTicket?: number | null;
+    purchaseFrequency?: number | null;
+    customerLifespan?: number | null;
     status?: string | null;
-    startDate?: string | null; // Mapeado de start_date
-    endDate?: string | null;   // Mapeado de end_date
+    startDate?: string | null;
+    endDate?: string | null;
     cost_traffic?: number | null;
     cost_creative?: number | null;
     cost_operational?: number | null;
@@ -89,41 +87,73 @@ interface CampaignResponse { // O que a API retorna (pode ser camelCase se o fro
     updated_at: string;
 }
 
+const toSnakeCase = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 
 const mapInputToDbFields = (input: Partial<CampaignInput>): Partial<CampaignDbRecord> => {
     const dbFields: Partial<CampaignDbRecord> = {};
+    const directMappingCamelToSnake: { [key: string]: keyof CampaignDbRecord } = {
+        targetAudience: 'target_audience',
+        adFormat: 'ad_format',
+        avgTicket: 'avg_ticket',
+        purchaseFrequency: 'purchase_frequency',
+        customerLifespan: 'customer_lifespan',
+        startDate: 'start_date',
+        endDate: 'end_date',
+        dailyBudget: 'daily_budget', // Exemplo se vier como dailyBudget
+        costTraffic: 'cost_traffic',
+        costCreative: 'cost_creative',
+        costOperational: 'cost_operational',
+        userId: 'user_id'
+    };
+
     for (const key in input) {
         if (Object.prototype.hasOwnProperty.call(input, key)) {
             const value = (input as any)[key];
-            if (key === 'targetAudience') dbFields['target_audience'] = value;
-            else if (key === 'adFormat') dbFields['ad_format'] = value;
-            else if (key === 'avgTicket') dbFields['avg_ticket'] = value;
-            else if (key === 'purchaseFrequency') dbFields['purchase_frequency'] = value;
-            else if (key === 'customerLifespan') dbFields['customer_lifespan'] = value;
-            else if (key === 'startDate') dbFields['start_date'] = value;
-            else if (key === 'endDate') dbFields['end_date'] = value;
-            // Para campos que já são snake_case ou não precisam de mapeamento explícito
-            // e são válidos para CampaignDbRecord
-            else if (['name', 'platform', 'objective', 'budget', 'daily_budget', 'duration', 'industry', 'segmentation', 'status', 'cost_traffic', 'cost_creative', 'cost_operational', 'user_id'].includes(key)) {
-                 (dbFields as any)[key] = value;
+            if (directMappingCamelToSnake[key]) {
+                (dbFields as any)[directMappingCamelToSnake[key]] = value;
+            } else if (Object.keys(dbFields).includes(toSnakeCase(key)) || Object.prototype.hasOwnProperty.call(new CampaignDbRecordExample(), toSnakeCase(key)) || Object.prototype.hasOwnProperty.call(new CampaignDbRecordExample(), key) ) {
+                 // Se a chave já é snake_case ou é um campo válido diretamente
+                (dbFields as any)[key] = value;
             }
         }
     }
+    // Para garantir que campos que podem vir como snake_case do frontend também sejam incluídos
+    // se não foram mapeados de um camelCase
+    const snakeCaseKeysInInput = ['name', 'platform', 'objective', 'budget', 'daily_budget', 'duration', 'industry', 'target_audience', 'segmentation', 'ad_format', 'avg_ticket', 'purchase_frequency', 'customer_lifespan', 'status', 'start_date', 'end_date', 'cost_traffic', 'cost_creative', 'cost_operational', 'user_id'];
+    snakeCaseKeysInInput.forEach(snakeKey => {
+        if (Object.prototype.hasOwnProperty.call(input, snakeKey) && !Object.prototype.hasOwnProperty.call(dbFields, snakeKey)) {
+            (dbFields as any)[snakeKey] = (input as any)[snakeKey];
+        }
+    });
+
+
     return dbFields;
 };
+// Helper para mapInputToDbFields, para checar se uma chave existe no modelo DB
+class CampaignDbRecordExample implements Partial<CampaignDbRecord> {
+    id?: any; name?: any; user_id?: any; platform?: any; objective?: any; budget?: any; daily_budget?: any; duration?: any; industry?: any; target_audience?: any; segmentation?: any; ad_format?: any; avg_ticket?: any; purchase_frequency?: any; customer_lifespan?: any; status?: any; start_date?: any; end_date?: any; cost_traffic?: any; cost_creative?: any; cost_operational?: any; created_at?: any; updated_at?: any;
+}
+
 
 const parseDbRecordToResponse = (dbRecord: CampaignDbRecord): CampaignResponse => {
-    const response: any = { ...dbRecord };
-    try { if (response.platform && typeof response.platform === 'string') response.platform = JSON.parse(response.platform); } catch (e) { console.warn(`Erro parse platform ID ${response.id}: ${e}`); response.platform = null;}
-    try { if (response.objective && typeof response.objective === 'string') response.objective = JSON.parse(response.objective); } catch (e) { console.warn(`Erro parse objective ID ${response.id}: ${e}`); response.objective = null;}
-    try { if (response.ad_format && typeof response.ad_format === 'string') response.adFormat = JSON.parse(response.ad_format); else response.adFormat = null; delete response.ad_format; } catch (e) { console.warn(`Erro parse ad_format ID ${response.id}: ${e}`); response.adFormat = null; delete response.ad_format; }
+    const response: Partial<CampaignResponse> & { [key: string]: any } = { ...dbRecord };
     
-    if (response.target_audience !== undefined) { response.targetAudience = response.target_audience; delete response.target_audience; }
-    if (response.avg_ticket !== undefined) { response.avgTicket = response.avg_ticket; delete response.avg_ticket; }
-    if (response.purchase_frequency !== undefined) { response.purchaseFrequency = response.purchase_frequency; delete response.purchase_frequency; }
-    if (response.customer_lifespan !== undefined) { response.customerLifespan = response.customer_lifespan; delete response.customer_lifespan; }
-    if (response.start_date !== undefined) { response.startDate = response.start_date; delete response.start_date; }
-    if (response.end_date !== undefined) { response.endDate = response.end_date; delete response.end_date; }
+    try { if (dbRecord.platform && typeof dbRecord.platform === 'string') response.platform = JSON.parse(dbRecord.platform); } catch (e) { console.warn(`Erro parse platform ID ${dbRecord.id}: ${e}`); response.platform = null;}
+    try { if (dbRecord.objective && typeof dbRecord.objective === 'string') response.objective = JSON.parse(dbRecord.objective); } catch (e) { console.warn(`Erro parse objective ID ${dbRecord.id}: ${e}`); response.objective = null;}
+    
+    if (dbRecord.ad_format) {
+        try { response.adFormat = JSON.parse(dbRecord.ad_format); } catch (e) { console.warn(`Erro parse ad_format ID ${dbRecord.id}: ${e}`); response.adFormat = null;}
+    } else { response.adFormat = null; }
+    delete response.ad_format;
+
+    if (dbRecord.target_audience !== undefined) { response.targetAudience = dbRecord.target_audience; delete response.target_audience; }
+    if (dbRecord.avg_ticket !== undefined) { response.avgTicket = dbRecord.avg_ticket; delete response.avg_ticket; }
+    if (dbRecord.purchase_frequency !== undefined) { response.purchaseFrequency = dbRecord.purchase_frequency; delete response.purchase_frequency; }
+    if (dbRecord.customer_lifespan !== undefined) { response.customerLifespan = dbRecord.customer_lifespan; delete response.customer_lifespan; }
+    if (dbRecord.start_date !== undefined) { response.startDate = dbRecord.start_date; delete response.start_date; }
+    if (dbRecord.end_date !== undefined) { response.endDate = dbRecord.end_date; delete response.end_date; }
+    if (dbRecord.daily_budget !== undefined) { response.daily_budget = dbRecord.daily_budget; } // Mantem daily_budget se for o caso, ou pode mapear para dailyBudget se preferir consistência camelCase no response
+
 
     return response as CampaignResponse;
 };
@@ -140,7 +170,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (req.method === 'GET') {
             const { id, fields, limit, sort, user_id } = req.query;
-            const allowedDbFields = ['id', 'user_id', 'name', 'platform', 'objective', 'budget', 'daily_budget', 'duration', 'industry', 'target_audience', 'segmentation', 'ad_format', 'avg_ticket', 'purchase_frequency', 'customer_lifespan', 'status', 'start_date', 'end_date', 'cost_traffic', 'cost_creative', 'cost_operational', 'created_at', 'updated_at'];
+            const campaignDbSchema = new CampaignDbRecordExample();
+            const allowedDbFields = Object.keys(campaignDbSchema);
+
 
             if (id && typeof id === 'string') {
                 console.log(`[API Campaigns GET ID] Buscando ID: ${id}`);
@@ -158,20 +190,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 if (fields && typeof fields === 'string') {
                     const requestedFieldsInput = fields.split(',').map(f => f.trim());
                     const tempMapInput: Partial<CampaignInput> = {};
-                    requestedFieldsInput.forEach(f => (tempMapInput as any)[f] = true);
-                    const mappedToDbKeys = Object.keys(mapInputToDbFields(tempMapInput));
+                    requestedFieldsInput.forEach(fCamel => { // Assume que fields vem em camelCase
+                        const fSnake = toSnakeCase(fCamel);
+                        if (allowedDbFields.includes(fSnake)) (tempMapInput as any)[fSnake] = true; // Mapeia para snake para mapInputToDbFields
+                        else if (allowedDbFields.includes(fCamel)) (tempMapInput as any)[fCamel] = true; // Se já for snake ou nome igual
+                    });
                     
+                    const mappedToDbKeys = Object.keys(mapInputToDbFields(tempMapInput)); // mapInputToDbFields espera camelCase e retorna snake_case
                     const validDbFields = mappedToDbKeys.filter(f => allowedDbFields.includes(f));
+
                     if (validDbFields.length > 0) { 
                         selectFields = validDbFields.map(f => dbConnection!.escapeId(f)).join(', '); 
+                    } else {
+                        selectFields = 'id, name'; // Default seguro se nenhum campo válido for encontrado
                     }
                 }
+
 
                 let query = `SELECT ${selectFields} FROM campaigns`;
                 const queryParams: any[] = [];
                 const whereClauses: string[] = [];
 
-                if (user_id && typeof user_id === 'string') {
+                if (user_id && typeof user_id === 'string' && /^\d+$/.test(user_id)) {
                     whereClauses.push('user_id = ?');
                     queryParams.push(parseInt(user_id, 10));
                 }
@@ -184,13 +224,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 let sortOrder = 'DESC'; 
 
                 if (sort && typeof sort === 'string') {
-                    const [sortFieldReq, sortOrderReq = 'asc'] = sort.split(':');
-                    const tempSortInput: Partial<CampaignInput> = {}; 
-                    (tempSortInput as any)[sortFieldReq] = true;
-                    const mappedSortField = Object.keys(mapInputToDbFields(tempSortInput))[0];
-
-                    if (allowedDbFields.includes(mappedSortField) && ['asc', 'desc'].includes(sortOrderReq.toLowerCase())) { 
-                        sortFieldDb = mappedSortField;
+                    const [sortFieldReqCamel, sortOrderReq = 'asc'] = sort.split(':');
+                    const sortFieldReqSnake = toSnakeCase(sortFieldReqCamel);
+                    
+                    if (allowedDbFields.includes(sortFieldReqSnake) && ['asc', 'desc'].includes(sortOrderReq.toLowerCase())) { 
+                        sortFieldDb = sortFieldReqSnake;
+                        sortOrder = sortOrderReq.toUpperCase();
+                    } else if (allowedDbFields.includes(sortFieldReqCamel) && ['asc', 'desc'].includes(sortOrderReq.toLowerCase())) { // Caso o campo de sort já seja snake_case
+                        sortFieldDb = sortFieldReqCamel;
                         sortOrder = sortOrderReq.toUpperCase();
                     }
                 }
@@ -212,21 +253,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         else if (req.method === 'POST') {
             console.log("[API Campaigns POST] Requisição recebida.");
             const campaignRawInput: CampaignInput = req.body;
-            // Name é obrigatório para POST
             if (!campaignRawInput.name || typeof campaignRawInput.name !== 'string' || campaignRawInput.name.trim() === '') {
                 console.error("[API Campaigns POST] Erro: Nome ausente ou inválido.");
                 return res.status(400).json({ error: 'Nome da campanha é obrigatório' });
             }
 
-            const campaignDbInput = mapInputToDbFields(campaignRawInput) as CampaignDbRecord; // Mapeia para snake_case
-            campaignDbInput.name = campaignRawInput.name.trim(); // Garantir que name está presente e trimado
-            console.log("[API Campaigns POST] Dados para DB:", campaignDbInput);
-
-
-            const id = crypto.randomUUID();
-            const platformJson = (campaignDbInput.platform && Array.isArray(campaignDbInput.platform)) ? JSON.stringify(campaignDbInput.platform) : (typeof campaignDbInput.platform === 'string' ? campaignDbInput.platform : null);
-            const objectiveJson = (campaignDbInput.objective && Array.isArray(campaignDbInput.objective)) ? JSON.stringify(campaignDbInput.objective) : (typeof campaignDbInput.objective === 'string' ? campaignDbInput.objective : null);
-            const adFormatJson = (campaignDbInput.ad_format && Array.isArray(campaignDbInput.ad_format)) ? JSON.stringify(campaignDbInput.ad_format) : (typeof campaignDbInput.ad_format === 'string' ? campaignDbInput.ad_format : null);
+            const campaignDbInput = mapInputToDbFields(campaignRawInput);
+            
+            // Garantir que todos os campos snake_case esperados pela query INSERT estejam presentes
+            // mesmo que com valor null, se não vieram do input.
+            const fullCampaignDbData: CampaignDbRecord = {
+                id: crypto.randomUUID(),
+                name: campaignRawInput.name.trim(), // Obrigatório
+                user_id: campaignDbInput.user_id ?? (campaignRawInput.userId ?? null),
+                platform: (campaignDbInput.platform && Array.isArray(campaignDbInput.platform)) ? JSON.stringify(campaignDbInput.platform) : (typeof campaignDbInput.platform === 'string' ? campaignDbInput.platform : null),
+                objective: (campaignDbInput.objective && Array.isArray(campaignDbInput.objective)) ? JSON.stringify(campaignDbInput.objective) : (typeof campaignDbInput.objective === 'string' ? campaignDbInput.objective : null),
+                budget: campaignDbInput.budget != null && String(campaignDbInput.budget) !== '' ? Number(campaignDbInput.budget) : null,
+                daily_budget: campaignDbInput.daily_budget != null && String(campaignDbInput.daily_budget) !== '' ? Number(campaignDbInput.daily_budget) : (campaignRawInput.dailyBudget != null && String(campaignRawInput.dailyBudget) !== '' ? Number(campaignRawInput.dailyBudget) : null),
+                duration: campaignDbInput.duration != null && String(campaignDbInput.duration) !== '' ? Number(campaignDbInput.duration) : null,
+                industry: campaignDbInput.industry ?? null,
+                target_audience: campaignDbInput.target_audience ?? (campaignRawInput.targetAudience ?? null),
+                segmentation: campaignDbInput.segmentation ?? null,
+                ad_format: (campaignDbInput.ad_format && Array.isArray(campaignDbInput.ad_format)) ? JSON.stringify(campaignDbInput.ad_format) : (typeof campaignDbInput.ad_format === 'string' ? campaignDbInput.ad_format : (campaignRawInput.adFormat && Array.isArray(campaignRawInput.adFormat)) ? JSON.stringify(campaignRawInput.adFormat) : (typeof campaignRawInput.adFormat === 'string' ? campaignRawInput.adFormat : null)),
+                avg_ticket: campaignDbInput.avg_ticket ?? (campaignRawInput.avgTicket ?? null),
+                purchase_frequency: campaignDbInput.purchase_frequency ?? (campaignRawInput.purchaseFrequency ?? null),
+                customer_lifespan: campaignDbInput.customer_lifespan ?? (campaignRawInput.customerLifespan ?? null),
+                status: campaignDbInput.status ?? 'draft',
+                start_date: campaignDbInput.start_date ? new Date(campaignDbInput.start_date).toISOString().slice(0, 10) : (campaignRawInput.startDate ? new Date(campaignRawInput.startDate).toISOString().slice(0,10) : null),
+                end_date: campaignDbInput.end_date ? new Date(campaignDbInput.end_date).toISOString().slice(0, 10) : (campaignRawInput.endDate ? new Date(campaignRawInput.endDate).toISOString().slice(0,10) : null),
+                cost_traffic: campaignDbInput.cost_traffic != null && String(campaignDbInput.cost_traffic) !== '' ? Number(campaignDbInput.cost_traffic) : (campaignRawInput.costTraffic != null && String(campaignRawInput.costTraffic) !== '' ? Number(campaignRawInput.costTraffic) : 0.00),
+                cost_creative: campaignDbInput.cost_creative != null && String(campaignDbInput.cost_creative) !== '' ? Number(campaignDbInput.cost_creative) : (campaignRawInput.costCreative != null && String(campaignRawInput.costCreative) !== '' ? Number(campaignRawInput.costCreative) : 0.00),
+                cost_operational: campaignDbInput.cost_operational != null && String(campaignDbInput.cost_operational) !== '' ? Number(campaignDbInput.cost_operational) : (campaignRawInput.costOperational != null && String(campaignRawInput.costOperational) !== '' ? Number(campaignRawInput.costOperational) : 0.00),
+                created_at: new Date().toISOString(), // será sobrescrito pelo default do DB
+                updated_at: new Date().toISOString(), // será sobrescrito pelo default do DB
+            };
+            console.log("[API Campaigns POST] Dados Completos para DB:", fullCampaignDbData);
 
             const sql = `
                 INSERT INTO campaigns (
@@ -236,29 +297,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
             const params = [
-                id, campaignDbInput.name, campaignDbInput.user_id ?? null,
-                platformJson, objectiveJson,
-                campaignDbInput.budget != null && String(campaignDbInput.budget) !== '' ? Number(campaignDbInput.budget) : null,
-                campaignDbInput.daily_budget != null && String(campaignDbInput.daily_budget) !== '' ? Number(campaignDbInput.daily_budget) : null,
-                campaignDbInput.duration != null && String(campaignDbInput.duration) !== '' ? Number(campaignDbInput.duration) : null,
-                campaignDbInput.industry ?? null, campaignDbInput.target_audience ?? null, campaignDbInput.segmentation ?? null,
-                adFormatJson,
-                campaignDbInput.avg_ticket ?? null, campaignDbInput.purchase_frequency ?? null, campaignDbInput.customer_lifespan ?? null,
-                campaignDbInput.status ?? 'draft',
-                campaignDbInput.start_date ? new Date(campaignDbInput.start_date).toISOString().slice(0, 10) : null,
-                campaignDbInput.end_date ? new Date(campaignDbInput.end_date).toISOString().slice(0, 10) : null,
-                campaignDbInput.cost_traffic != null && String(campaignDbInput.cost_traffic) !== '' ? Number(campaignDbInput.cost_traffic) : 0.00,
-                campaignDbInput.cost_creative != null && String(campaignDbInput.cost_creative) !== '' ? Number(campaignDbInput.cost_creative) : 0.00,
-                campaignDbInput.cost_operational != null && String(campaignDbInput.cost_operational) !== '' ? Number(campaignDbInput.cost_operational) : 0.00
+                fullCampaignDbData.id, fullCampaignDbData.name, fullCampaignDbData.user_id,
+                fullCampaignDbData.platform, fullCampaignDbData.objective,
+                fullCampaignDbData.budget, fullCampaignDbData.daily_budget, fullCampaignDbData.duration,
+                fullCampaignDbData.industry, fullCampaignDbData.target_audience, fullCampaignDbData.segmentation,
+                fullCampaignDbData.ad_format, fullCampaignDbData.avg_ticket, fullCampaignDbData.purchase_frequency,
+                fullCampaignDbData.customer_lifespan, fullCampaignDbData.status,
+                fullCampaignDbData.start_date, fullCampaignDbData.end_date,
+                fullCampaignDbData.cost_traffic, fullCampaignDbData.cost_creative, fullCampaignDbData.cost_operational
             ];
 
             console.log("[API Campaigns POST] SQL Query:", sql.substring(0, 300) + "...");
             console.log("[API Campaigns POST] Params:", JSON.stringify(params).substring(0,300) + "...");
 
             await dbConnection.query(sql, params);
-            console.log("[API Campaigns POST] INSERT executado com sucesso. ID:", id);
+            console.log("[API Campaigns POST] INSERT executado com sucesso. ID:", fullCampaignDbData.id);
 
-            const [newCampaignRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ?', [id]);
+            const [newCampaignRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ?', [fullCampaignDbData.id]);
             if (newCampaignRows.length > 0) {
                 res.status(201).json(parseDbRecordToResponse(newCampaignRows[0] as CampaignDbRecord));
             } else {
@@ -268,39 +323,61 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         else if (req.method === 'PUT') {
             const { id } = req.query;
             const updateRawData: Partial<CampaignInput> = req.body;
-            // A função mapInputToDbFields agora aceita Partial<CampaignInput>
             const updateDbData = mapInputToDbFields(updateRawData); 
 
             if (!id || typeof id !== 'string') {
                 return res.status(400).json({ message: 'ID da campanha é obrigatório na query string' });
             }
-            if (Object.keys(updateDbData).length === 0) {
+            if (Object.keys(updateDbData).length === 0 && Object.keys(updateRawData).filter(k => k in new CampaignDbRecordExample()).length === 0 ) { // Checa se há campos mapeáveis
                 return res.status(400).json({ message: 'Nenhum campo fornecido para atualização.' });
             }
             
             const fieldsToUpdate: string[] = [];
             const paramsForUpdate: any[] = [];
-            const allowedUpdateDbFields = ['name', 'user_id', 'platform', 'objective', 'budget', 'daily_budget', 'duration', 'industry', 'target_audience', 'segmentation', 'ad_format', 'avg_ticket', 'purchase_frequency', 'customer_lifespan', 'status', 'start_date', 'end_date', 'cost_traffic', 'cost_creative', 'cost_operational'];
+            const campaignDbSchemaForUpdate = new CampaignDbRecordExample();
+            const allowedUpdateDbFields = Object.keys(campaignDbSchemaForUpdate).filter(k => k !== 'id' && k !== 'created_at' && k !== 'updated_at');
+
 
             Object.entries(updateDbData).forEach(([key, value]) => {
-                // Verificamos se a chave (já em snake_case vinda de mapInputToDbFields) é permitida
                 if (value !== undefined && allowedUpdateDbFields.includes(key)) {
                     fieldsToUpdate.push(`${dbConnection!.escapeId(key)} = ?`);
                     if (['platform', 'objective', 'ad_format'].includes(key)) {
                         paramsForUpdate.push((value && Array.isArray(value)) ? JSON.stringify(value) : (typeof value === 'string' ? value : null));
                     } else if (['start_date', 'end_date'].includes(key) && value) {
-                        paramsForUpdate.push(new Date(value as string).toISOString().slice(0, 10));
+                        try { paramsForUpdate.push(new Date(value as string).toISOString().slice(0, 10));} catch {paramsForUpdate.push(null);}
                     } else if (value === null || (typeof value === 'string' && value.trim() === '')) {
                          paramsForUpdate.push(null);
-                    } else if (typeof value === 'string' && ['budget', 'daily_budget', 'duration', 'avg_ticket', 'purchase_frequency', 'customer_lifespan', 'cost_traffic', 'cost_creative', 'cost_operational'].includes(key)) {
+                    } else if (typeof value === 'string' && ['budget', 'daily_budget', 'duration', 'avg_ticket', 'purchase_frequency', 'customer_lifespan', 'cost_traffic', 'cost_creative', 'cost_operational', 'user_id'].includes(key)) {
                         const numValue = Number(value);
-                        paramsForUpdate.push(isNaN(numValue) ? null : numValue); // Evita NaN
+                        paramsForUpdate.push(isNaN(numValue) ? null : numValue);
                     }
                      else {
                         paramsForUpdate.push(value);
                     }
                 }
             });
+             // Considerar também campos que vieram em camelCase e foram mapeados diretamente para snake_case por mapInputToDbFields
+            Object.entries(updateRawData).forEach(([key, value]) => {
+                const snakeKey = toSnakeCase(key);
+                if (value !== undefined && allowedUpdateDbFields.includes(snakeKey) && !fieldsToUpdate.some(f => f.startsWith(dbConnection!.escapeId(snakeKey)))) {
+                     fieldsToUpdate.push(`${dbConnection!.escapeId(snakeKey)} = ?`);
+                     // Repetir lógica de formatação de valor
+                    if (['platform', 'objective', 'ad_format'].includes(snakeKey)) {
+                        paramsForUpdate.push((value && Array.isArray(value)) ? JSON.stringify(value) : (typeof value === 'string' ? value : null));
+                    } else if (['start_date', 'end_date'].includes(snakeKey) && value) {
+                        try { paramsForUpdate.push(new Date(value as string).toISOString().slice(0, 10));} catch {paramsForUpdate.push(null);}
+                    } else if (value === null || (typeof value === 'string' && value.trim() === '')) {
+                         paramsForUpdate.push(null);
+                    } else if (typeof value === 'string' && ['budget', 'daily_budget', 'duration', 'avg_ticket', 'purchase_frequency', 'customer_lifespan', 'cost_traffic', 'cost_creative', 'cost_operational', 'user_id'].includes(snakeKey)) {
+                        const numValue = Number(value);
+                        paramsForUpdate.push(isNaN(numValue) ? null : numValue);
+                    }
+                     else {
+                        paramsForUpdate.push(value);
+                    }
+                }
+            });
+
 
             if (fieldsToUpdate.length === 0) {
                 return res.status(400).json({ message: 'Nenhum campo válido para atualização.' });
@@ -318,7 +395,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 if (checkRows.length === 0) {
                     return res.status(404).json({ message: 'Campanha não encontrada para atualização.' });
                 }
-                // Se a campanha existe mas nada foi alterado (dados iguais), ainda é um "sucesso"
                  console.log("[API Campaigns PUT] Nenhuma linha afetada, mas campanha existe. Dados podem ser os mesmos.");
             }
 
@@ -326,7 +402,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
              if (updatedCampaignRows.length > 0) {
                 res.status(200).json(parseDbRecordToResponse(updatedCampaignRows[0] as CampaignDbRecord));
             } else {
-                 // Isso não deveria acontecer se result.affectedRows > 0 ou se a campanha existia
                 res.status(404).json({ message: 'Campanha não encontrada após tentativa de atualização.' });
             }
         }
@@ -337,6 +412,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }
             console.log(`[API Campaigns DELETE] Tentando deletar ID: ${id}`);
             
+            // Considerar transação aqui se todas as deleções forem críticas em conjunto
             await dbConnection.query('DELETE FROM daily_metrics WHERE campaign_id = ?', [id]);
             await dbConnection.query('DELETE FROM copies WHERE campaign_id = ?', [id]);
             await dbConnection.query('DELETE FROM creatives WHERE campaign_id = ?', [id]);
