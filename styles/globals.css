@@ -4,28 +4,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
 
 /* Diretivas essenciais do Tailwind CSS */
-/* Elas devem vir antes de quaisquer @layer customizadas */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-/* @tailwind variants; <-- Adicione se usar @layer variants */
-
 
 /* Camadas customizadas */
 @layer base {
-  /* === Dark Neumorphism Palette === */
   :root {
     --background: 220 10% 7%; --foreground: 210 15% 90%;
     --element-bg: 220 10% 7%; --element-bg-raised: 220 10% 9%; --element-bg-inset: 220 10% 5%; --element-foreground: 210 15% 85%;
-    /* As variáveis abaixo *não* usam alpha, então devem ser opacas por padrão */
-    --popover: 220 10% 11%; --popover-foreground: 210 15% 85%; /* Usando --popover conforme usado nos componentes */
-    --primary: 210 90% 60%; --primary-foreground: 210 20% 98%; /* Azul Neon Principal */
+    --popover: 220 10% 11%; --popover-foreground: 210 15% 85%;
+    --primary: 210 90% 60%; --primary-foreground: 210 20% 98%;
     --accent: 215 20% 18%; --accent-foreground: 210 15% 90%;
     --destructive: 0 70% 55%; --destructive-foreground: 0 0% 98%;
     --muted: 215 15% 20%; --muted-foreground: 210 10% 55%;
     --border: 220 10% 12%; --input-border: transparent; --ring: 210 90% 65%;
     --radius: 0.75rem;
-    /* --- Neumorphic Shadow Variables --- */
     --shadow-dark-source-hsl: 220 15% 3%; --shadow-light-source-hsl: 220 5% 15%;
     --shadow-offset: 5px; --shadow-blur: 10px; --shadow-spread-outset: 1px; --shadow-spread-inset: 0px;
     --neumorphic-shadow-outset: var(--shadow-offset) var(--shadow-offset) var(--shadow-blur) var(--shadow-spread-outset) hsl(var(--shadow-dark-source-hsl)), calc(-1 * var(--shadow-offset)) calc(-1 * var(--shadow-offset)) var(--shadow-blur) var(--shadow-spread-outset) hsl(var(--shadow-light-source-hsl));
@@ -33,12 +27,8 @@
     --neumorphic-shadow-pressed: inset calc(var(--shadow-offset) / 2) calc(var(--shadow-offset) / 2) calc(var(--shadow-blur) / 2) var(--shadow-spread-inset) hsl(var(--shadow-dark-source-hsl)), inset calc(-1 * var(--shadow-offset) / 2) calc(-1 * var(--shadow-offset) / 2) calc(var(--shadow-blur) / 2) var(--shadow-spread-inset) hsl(var(--shadow-light-source-hsl));
     --neumorphic-text-shadow-dark: 1px 1px 1px hsl(var(--shadow-dark-source-hsl) / 0.5); --neumorphic-text-shadow-light: -1px -1px 1px hsl(var(--shadow-light-source-hsl) / 0.5);
     --neumorphic-text-shadow: var(--neumorphic-text-shadow-dark), var(--neumorphic-text-shadow-light);
-    /* Chart Colors */
     --chart-1: 210 90% 60%; --chart-2: 160 70% 50%; --chart-3: 45 90% 55%; --chart-4: 0 80% 65%; --chart-5: 260 75% 65%;
-    /* Sidebar Colors */
-    /* As variáveis abaixo *não* usam alpha, então devem ser opacas por padrão */
     --sidebar-background: 224 12% 4%; --sidebar-foreground: 210 10% 75%; --sidebar-border: 224 10% 10%; --sidebar-accent: 220 15% 15%; --sidebar-accent-foreground: 210 15% 95%;
-    /* Glows */
     --title-glow-color: hsl(var(--primary) / 0.5); --title-neon-shadow: 0 0 8px var(--title-glow-color);
     --logo-glow-color: hsl(var(--primary) / 0.4); --logo-drop-shadow: 0 0 10px var(--logo-glow-color);
     --neon-glow-shadow: 0 0 12px hsl(var(--primary) / 0.7);
@@ -52,13 +42,11 @@
     background-color: hsl(var(--background)); background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;
     @apply text-foreground; font-family: 'Montserrat', sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
    }
-  /* Manter a regra global de foco, mas tentar sobrescrevê-la nos botões problemáticos com !important */
   *:focus-visible { @apply outline-none ring-2 ring-offset-2 ring-[hsl(var(--ring))] ring-offset-[hsl(var(--background))]; }
   .neumorphic-text { text-shadow: var(--neumorphic-text-shadow); }
 }
 
 @layer components {
-  /* === Dark Neumorphism Base Components === */
   .card { @apply bg-[hsl(var(--element-bg-raised))] rounded-xl shadow-[var(--neumorphic-shadow-outset)] text-[hsl(var(--element-foreground))] transition-shadow duration-200 ease-out; border: none; }
   .card-interactive:hover { @apply brightness-[1.08] shadow-[var(--neumorphic-shadow-outset)]; }
   .input, .textarea, .select-trigger-neumorphic { @apply bg-[hsl(var(--element-bg-inset))] rounded-lg shadow-[var(--neumorphic-shadow-inset)] text-foreground placeholder:text-muted-foreground border-none px-3 py-2 h-9 ring-offset-[hsl(var(--background))] transition-shadow duration-200 ease-out flex items-center; }
@@ -71,9 +59,8 @@
   .button-neumorphic-primary { @apply button-neumorphic bg-primary text-primary-foreground; }
   .button-neumorphic-primary:hover:not(:disabled) { @apply bg-primary/90 brightness-110; }
   .button-neumorphic-primary:active:not(:disabled) { @apply bg-primary/85 shadow-[var(--neumorphic-shadow-pressed)] scale-[0.98] brightness-95; }
-   /* Remover shadows e borders padrões dos botões Shadcn para usar os customizados */
   .button { @apply shadow-none !border-none; }
-  .button[variant="outline"] { @apply bg-transparent hover:bg-accent hover:text-accent-foreground shadow-none h-9 px-4 py-2; background-color: transparent !important; border: 1px solid hsl(var(--border)) !important; } /* Re-adicionar borda para outline */
+  .button[variant="outline"] { @apply bg-transparent hover:bg-accent hover:text-accent-foreground shadow-none h-9 px-4 py-2; background-color: transparent !important; border: 1px solid hsl(var(--border)) !important; }
   .button[variant="ghost"] { @apply hover:bg-accent hover:text-accent-foreground shadow-none h-9 px-4 py-2; background-color: transparent !important; border: none !important; }
   .button[variant="link"] { @apply shadow-none border-none; background-color: transparent !important; }
 
@@ -85,7 +72,6 @@
   .sidebar-nav-button[data-active="true"] svg { @apply text-primary; }
   .group:hover .sidebar-nav-button svg:not([data-active="true"] svg) { @apply text-sidebar-foreground/70; }
   .sidebar-nav-button:not([data-active="true"]) svg { @apply text-sidebar-foreground/70; }
-  /* === Outros === */
   .title-glow { text-shadow: var(--title-neon-shadow); }
   .logo-shadow { filter: drop-shadow(var(--logo-drop-shadow)); }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -93,7 +79,6 @@
   ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 10px; border: 2px solid hsl(var(--background)); }
   ::-webkit-scrollbar-thumb:hover { background: hsl(var(--accent)); }
 
-  /* === Estilos para Nós do React Flow === */
   .node-card {
     @apply !bg-[hsl(var(--element-bg-raised))] !border-[#3a7ebf]/40 text-white shadow-[var(--neumorphic-shadow-outset)] rounded-lg transition-shadow duration-200 ease-out;
     min-width: 150px;
@@ -123,8 +108,24 @@
   .react-flow__handle-valid { @apply !bg-green-400; }
   .react-flow__edge path { @apply !stroke-primary; stroke-width: 1.5; }
 
-  /* Estilo para o botão de contexto (Exemplo) */
   .context-menu-button { @apply w-full px-2 py-1.5 text-left text-xs rounded hover:bg-accent flex items-center gap-2; }
   .context-menu-icon { @apply h-3.5 w-3.5; }
 
+  /* GrapesJS Studio Branding Override */
+  div[class*="gjs-logo-cont"], 
+  div[class*="gjs-logo"],
+  a[class*="gjs-logo-link"],
+  div[class*="gjs-studio-branding"],
+  div[class*="studio-branding"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    z-index: -9999 !important;
+    position: absolute !important;
+    left: -9999px !important;
+  }
 }
