@@ -1,0 +1,24 @@
+{
+  "name": "valiant-hope-bot",
+  "version": "1.0.0",
+  "description": "Node.js WhatsApp Bot service for USBMKT V50MCP",
+  "main": "whatsappBot.js",
+  "scripts": {
+    "start": "node whatsappBot.js"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "baileys",
+    "automation"
+  ],
+  "author": "USBMKT",
+  "license": "ISC",
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.5.0",
+    "pino": "8.1.0",
+    "pino-pretty": "9.1.0",
+    "qrcode-terminal": "0.12.0",
+    "axios": "1.6.8"
+  }
+}
