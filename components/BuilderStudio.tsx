@@ -24,9 +24,7 @@ const BuilderStudio = () => {
       licenseKey: "e13fc60e9e0546f7a0c27dbf4f0824b5c5bc6e9aabab4985bdc0314bcb426418",
       theme: "dark",
       project: { type: "web" },
-      ui: { // Adicionar esta seção
-        branding: false, // Adicionar esta linha para remover o logo
-      },
+      // A opção 'ui' foi removida daqui, pois causou erro de compilação
       storage: {
         type: "self",
         autosaveChanges: 100,
