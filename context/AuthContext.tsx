@@ -47,7 +47,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const router = useRouter();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://v2-production-cc95.up.railway.app';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://usbmktprov1.up.railway.app/';
 
   const processAndSetToken = useCallback((token: string | null): boolean => {
     if (token) {
