@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Head from 'next/head';
 import Layout from '@/components/layout';
-import type { Campaign } from '@/entities/Campaign';
+// Removido: import type { Campaign } from '@/entities/Campaign'; // Usaremos CampaignOption e SimpleCampaignChatInfo
 import { useRouter } from 'next/router';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,10 +22,31 @@ import { useAuth } from '@/context/AuthContext';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Conversation { id: string; title: string; date: string; messages: Message[]; }
-interface SimpleCampaignChatInfo { id?: string | number; name?: string | null; platform?: any | null; daily_budget?: number | null; duration?: number | null; objective?: any | null; }
-interface CopyInfo { id?: string | number; campaign_id?: string | number; title?: string | null; cta?: string | null; target_audience?: string | null; content?: string | null; }
+
+// Interface para os dados da campanha como retornados pela API e usados no Chat
+interface CampaignDataForChat {
+    id?: string | number;
+    name?: string | null;
+    platform?: string[] | string | null; // Pode ser array de strings ou string única se o parse falhar e a API retornar a string original
+    objective?: string[] | string | null; // Similar ao platform
+    adFormat?: string[] | string | null; // Similar ao platform
+    targetAudience?: any | null; // Pode ser um objeto parseado ou string se o parse falhar
+    daily_budget?: number | null;
+    duration?: number | null;
+    // Adicione outros campos que você usa no contexto
+}
+
+interface CopyInfo { 
+    id?: string | number; 
+    campaign_id?: string | number; 
+    title?: string | null; 
+    cta?: string | null; 
+    target_audience?: string | null; // Assumindo que este é texto simples
+    content?: string | null; 
+}
+
 interface ChatPageProps {}
-type CampaignOption = Pick<Campaign, 'id' | 'name'>;
+type CampaignOption = { id: string | number; name: string | null }; // Ajustado para id ser string ou number
 
 export default function ChatPage({ }: ChatPageProps) {
     const { isAuthenticated, isLoading: authLoading, token } = useAuth();
@@ -72,18 +93,22 @@ export default function ChatPage({ }: ChatPageProps) {
     const tabsTriggerStyle = "data-[state=active]:bg-[#1E90FF]/30 data-[state=active]:shadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-1px_-1px_2px_rgba(255,255,255,0.05)] data-[state=active]:text-white text-gray-400 hover:text-white hover:bg-[#1E90FF]/10 rounded-md px-3 py-1.5 text-sm transition-all duration-150";
     const primaryIconStyle = { filter: `drop-shadow(0 0 3px ${neonColor})` };
 
+    const formatFieldForContext = (value: any, defaultValue: string = 'N/A'): string => {
+        if (value === null || value === undefined) return defaultValue;
+        if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : defaultValue;
+        if (typeof value === 'object') return JSON.stringify(value); // Para targetAudience se for objeto
+        return String(value);
+    };
+
     const fetchCampaignOptions = useCallback(async () => {
-        console.log("[ChatPage] fetchCampaignOptions - Token:", token ? token.substring(0,10)+"..." : "Token NULO/UNDEFINED");
         if (!token) {
-            console.warn("[ChatPage] fetchCampaignOptions chamado sem token. Abortando.");
             setCampaignsLoading(false);
             return;
         }
-        console.log("[ChatPage] Iniciando fetchCampaignOptions...");
         setCampaignsLoading(true);
         setPageError(null);
         try {
-            const response = await axios.get<CampaignOption[]>(`${API_CAMPAIGNS_URL}?fields=id,name`, {
+            const response = await axios.get<CampaignOption[]>(`${API_CAMPAIGNS_URL}?fields=id,name&sort=name:asc`, { // Ordenar por nome asc
                 headers: { Authorization: `Bearer ${token}` },
                 timeout: 15000 
             });
@@ -92,27 +117,21 @@ export default function ChatPage({ }: ChatPageProps) {
             }
             const validOptions = response.data.filter(camp => camp.id != null && camp.name != null);
             setCampaignOptions(validOptions);
-            console.log("[ChatPage] Campaign options carregadas:", validOptions.length);
         } catch (error: any) {
             const errorMsg = error.response?.data?.message || error.message || "Falha ao buscar campanhas.";
             setPageError(`Erro Crítico ao Carregar Campanhas: ${errorMsg}.`);
             toast({ title: "Erro Crítico de Dados", description: errorMsg, variant: "destructive", duration: 10000 });
             setCampaignOptions([]);
-            console.error("[ChatPage] Erro em fetchCampaignOptions:", error.response?.data || error.toJSON?.() || error);
         } finally {
             setCampaignsLoading(false);
-            console.log("[ChatPage] fetchCampaignOptions finalizado.");
         }
     }, [API_CAMPAIGNS_URL, toast, token]);
 
     const generateContext = useCallback(async () => {
-        console.log("[ChatPage] generateContext - Token:", token ? token.substring(0,10)+"..." : "Token NULO/UNDEFINED");
         if (campaignsLoading || !isAuthenticated || !token) { 
-            console.log("[ChatPage] generateContext SKIPPED (pré-condições não atendidas):", { campaignsLoading, isAuthenticated, hasToken: !!token });
             if (!contextLoading) setContext("Contexto não pôde ser carregado (dados de campanha pendentes ou não autenticado).");
             return;
         }
-        console.log(`[ChatPage] Iniciando generateContext para campaignId: ${contextCampaignId}`);
         setContextLoading(true); 
         setContext("Carregando contexto..."); 
         let contextData = "Contexto não disponível.";
@@ -122,119 +141,97 @@ export default function ChatPage({ }: ChatPageProps) {
             let copySummary = "\nResumo dos textos não carregado.\n"; 
 
             if (contextCampaignId === "__general__") {
-                console.log("[ChatPage] generateContext: Fetching general campaigns (DEBUG)...");
                 try {
-                    const campaignsResponse = await axios.get(`${API_CAMPAIGNS_URL}?limit=3&sort=created_at:desc`, { ...authHeader, timeout: 15000 });
-                    const campaigns: SimpleCampaignChatInfo[] = campaignsResponse.data || [];
-                    console.log(`[ChatPage] generateContext: Fetched ${campaigns.length} general campaigns. Status: ${campaignsResponse.status}`);
+                    const campaignsResponse = await axios.get<CampaignDataForChat[]>(`${API_CAMPAIGNS_URL}?limit=3&sort=created_at:desc`, { ...authHeader, timeout: 15000 });
+                    const campaigns: CampaignDataForChat[] = campaignsResponse.data || [];
                     campaignSummary = "Resumo das 3 campanhas mais recentes:\n";
                     if (campaigns.length === 0) campaignSummary += "Nenhuma campanha disponível.\n";
-                    else campaigns.forEach((camp, i) => campaignSummary += `${i + 1}. Nome: ${camp.name || 'N/A'}, Plataforma: ${Array.isArray(camp.platform) ? camp.platform.join(', ') : camp.platform || 'N/A'}, Objetivo: ${Array.isArray(camp.objective) ? camp.objective.join(', ') : camp.objective || 'N/A'}\n`);
+                    else campaigns.forEach((camp, i) => {
+                        campaignSummary += `${i + 1}. Nome: ${formatFieldForContext(camp.name)}, Plataforma: ${formatFieldForContext(camp.platform)}, Objetivo: ${formatFieldForContext(camp.objective)}\n`;
+                    });
                 } catch (campaignError: any) {
-                    console.error("[ChatPage] generateContext - Erro ao buscar CAMPANHAS GERAIS:", campaignError.response?.data || campaignError.toJSON?.() || campaignError.message || campaignError);
-                    campaignSummary = "Erro ao carregar resumo de campanhas.\n";
-                    toast({ title: "Erro (Campanhas)", description: campaignError.message || "Falha ao buscar campanhas.", variant: "destructive" });
+                    campaignSummary = `Erro ao carregar resumo de campanhas: ${campaignError.message || 'Erro desconhecido'}\n`;
+                    toast({ title: "Erro (Campanhas Gerais)", description: campaignError.message || "Falha.", variant: "destructive" });
                 }
                 
-                console.log("[ChatPage] generateContext: Fetching general copies...");
                 try {
-                    const copiesResponse = await axios.get(`${API_COPIES_URL}?limit=3&sort=created_at:desc`, { ...authHeader, timeout: 15000 });
+                    const copiesResponse = await axios.get<CopyInfo[]>(`${API_COPIES_URL}?limit=3&sort=created_at:desc`, { ...authHeader, timeout: 15000 });
                     const copies: CopyInfo[] = copiesResponse.data || [];
-                    console.log(`[ChatPage] generateContext: Fetched ${copies.length} general copies. Status: ${copiesResponse.status}`);
                     copySummary = "\nResumo dos 3 textos mais recentes:\n";
                     if (copies.length === 0) copySummary += "Nenhum texto disponível.\n";
                     else copies.forEach((copy, i) => {
-                        copySummary += `${i + 1}. Título: ${copy.title || 'N/A'}, Público: ${copy.target_audience || 'N/A'}\n`;
+                        copySummary += `${i + 1}. Título: ${formatFieldForContext(copy.title)}, Público: ${formatFieldForContext(copy.target_audience)}\n`;
                         if (copy.content) copySummary += `   Conteúdo: ${copy.content.substring(0, 50)}...\n`;
                     });
                 } catch (copyError: any) {
-                    console.error("[ChatPage] generateContext - Erro ao buscar CÓPIAS GERAIS:", copyError.response?.data || copyError.toJSON?.() || copyError.message || copyError);
-                    copySummary = "\nErro ao carregar resumo de textos.\n";
-                    toast({ title: "Erro (Textos)", description: copyError.message || "Falha ao buscar textos.", variant: "destructive" });
+                    copySummary = `\nErro ao carregar resumo de textos: ${copyError.message || 'Erro desconhecido'}\n`;
+                    toast({ title: "Erro (Textos Gerais)", description: copyError.message || "Falha.", variant: "destructive" });
                 }
                 contextData = campaignSummary + copySummary;
 
             } else { 
-                console.log(`[ChatPage] generateContext: Fetching specific campaign ${contextCampaignId}...`);
                 try {
-                    const campaignResponse = await axios.get(`${API_CAMPAIGNS_URL}?id=${contextCampaignId}`, { ...authHeader, timeout: 15000 });
-                    const campaign: SimpleCampaignChatInfo | null = (campaignResponse.status === 200 && campaignResponse.data && campaignResponse.data.id) ? campaignResponse.data : null;
+                    const campaignResponse = await axios.get<CampaignDataForChat>(`${API_CAMPAIGNS_URL}?id=${contextCampaignId}`, { ...authHeader, timeout: 15000 });
+                    const campaign: CampaignDataForChat | null = (campaignResponse.status === 200 && campaignResponse.data && campaignResponse.data.id) ? campaignResponse.data : null;
                     
                     if (campaign) {
-                        console.log(`[ChatPage] generateContext: Fetched campaign ${campaign?.name}. Status: ${campaignResponse.status}`);
-                        let campaignDetail = `Detalhes da Campanha "${campaign.name || 'N/A'}":\n`;
-                        campaignDetail += `Plataforma: ${Array.isArray(campaign.platform) ? campaign.platform.join(', ') : campaign.platform || 'N/A'}\nOrçamento: R$ ${campaign.daily_budget?.toFixed(2) || 'N/A'} / dia\nDuração: ${campaign.duration || 'N/A'} dias\nObjetivo: ${Array.isArray(campaign.objective) ? campaign.objective.join(', ') : campaign.objective || 'N/A'}\n`;
+                        let campaignDetail = `Detalhes da Campanha "${formatFieldForContext(campaign.name)}":\n`;
+                        campaignDetail += `Plataforma: ${formatFieldForContext(campaign.platform)}\n`;
+                        campaignDetail += `Formato do Anúncio: ${formatFieldForContext(campaign.adFormat)}\n`;
+                        campaignDetail += `Público-Alvo: ${formatFieldForContext(campaign.targetAudience)}\n`;
+                        campaignDetail += `Orçamento: R$ ${campaign.daily_budget?.toFixed(2) || 'N/A'} / dia\n`;
+                        campaignDetail += `Duração: ${formatFieldForContext(campaign.duration, 'N/A dias')}\n`;
+                        campaignDetail += `Objetivo: ${formatFieldForContext(campaign.objective)}\n`;
                         
-                        console.log(`[ChatPage] generateContext: Fetching copies for campaign ${contextCampaignId}...`);
-                        const copiesResponse = await axios.get(`${API_COPIES_URL}?campaign_id=${contextCampaignId}`, { ...authHeader, timeout: 15000 });
+                        const copiesResponse = await axios.get<CopyInfo[]>(`${API_COPIES_URL}?campaign_id=${contextCampaignId}`, { ...authHeader, timeout: 15000 });
                         const copies: CopyInfo[] = copiesResponse.data || [];
-                        console.log(`[ChatPage] generateContext: Fetched ${copies.length} copies. Status: ${copiesResponse.status}`);
                         let specCopySummary = "\nTextos desta campanha:\n";
                         if (copies.length === 0) specCopySummary += "Nenhum texto para esta campanha.\n";
                         else copies.forEach((copy, i) => {
-                            specCopySummary += `${i + 1}. Título: ${copy.title || 'N/A'}, CTA: ${copy.cta || 'N/A'}\n`;
+                            specCopySummary += `${i + 1}. Título: ${formatFieldForContext(copy.title)}, CTA: ${formatFieldForContext(copy.cta)}\n`;
                         });
                         contextData = campaignDetail + specCopySummary;
                     } else {
-                        console.warn(`[ChatPage] generateContext: Campanha específica ID ${contextCampaignId} não encontrada ou resposta inesperada. Status: ${campaignResponse.status}, Data:`, campaignResponse.data);
                         contextData = `Detalhes da campanha ID ${contextCampaignId} não encontrados. (Status: ${campaignResponse.status})`;
                         toast({ title: "Aviso", description: `Campanha ID ${contextCampaignId} não encontrada.`, variant: "default" });
                     }
 
                 } catch (specificContextError: any) {
-                    let errorDetails = "Detalhes indisponíveis";
-                    if (axios.isAxiosError(specificContextError)) {
-                        if (specificContextError.response) {
-                            errorDetails = `Status: ${specificContextError.response.status}, Data: ${JSON.stringify(specificContextError.response.data)}`;
-                        } else if (specificContextError.request) {
-                            errorDetails = "Sem resposta do servidor (possível erro de rede ou timeout).";
-                        } else {
-                            errorDetails = specificContextError.message;
-                        }
-                    } else {
-                        errorDetails = specificContextError.message || String(specificContextError);
+                    let errorDetails = specificContextError.message || String(specificContextError);
+                     if (axios.isAxiosError(specificContextError) && specificContextError.response) {
+                        errorDetails = `Status: ${specificContextError.response.status}, Data: ${JSON.stringify(specificContextError.response.data).substring(0,100)}`;
                     }
-                    console.error(`[ChatPage] generateContext - Erro ao buscar contexto específico para Campanha ID ${contextCampaignId}:`, errorDetails, specificContextError);
-                    contextData = `Erro ao carregar detalhes da campanha ${contextCampaignId}. (${specificContextError.response?.status || 'Erro de rede/config.'})`;
-                    toast({ title: "Erro (Contexto Específico)", description: `Falha ao buscar dados para campanha ID ${contextCampaignId}. Detalhes: ${errorDetails.substring(0,100)}...`, variant: "destructive" });
+                    contextData = `Erro ao carregar detalhes da campanha ${contextCampaignId}. (${errorDetails})`;
+                    toast({ title: "Erro (Contexto Específico)", description: `Falha: ${errorDetails}`, variant: "destructive" });
                 }
             }
-            console.log("[ChatPage] generateContext: Context data compiled:", contextData.substring(0, 200) + "...");
         } catch (overallError: any) { 
             const errorMsg = overallError.message || "Erro geral desconhecido em generateContext";
             contextData = `Erro crítico ao montar contexto: ${errorMsg}`;
-            console.error("[ChatPage] generateContext OVERALL ERROR:", overallError);
             toast({ title: "Erro Crítico de Contexto", description: errorMsg, variant: "destructive" });
         } finally {
             setContext(contextData);
             setContextLoading(false);
-            console.log("[ChatPage] generateContext FINISHED. contextLoading set to false. Final context snippet:", contextData.substring(0,100)+"...");
         }
-    }, [API_CAMPAIGNS_URL, API_COPIES_URL, contextCampaignId, toast, campaignsLoading, isAuthenticated, token]);
+    }, [API_CAMPAIGNS_URL, API_COPIES_URL, contextCampaignId, toast, campaignsLoading, isAuthenticated, token]); // Adicionado token como dependência
 
     const checkApiStatus = useCallback(async () => {
-        console.log("[ChatPage] Iniciando checkApiStatus...");
         setApiStatus('Verificando...');
         try {
             const response = await axios.get(`${API_LLM_URL}/health`, { timeout: 7000 }); 
             if (response.data?.status === 'ok' && response.status === 200) {
                  setApiStatus(response.data?.message ||'IA Operacional');
-                 console.log("[ChatPage] checkApiStatus: Operacional - ", response.data?.message);
             } else {
-                setApiStatus(`API IA: Erro (${response.status} - ${response.data?.error || response.data?.status || 'Resposta inesperada'})`);
-                console.warn("[ChatPage] checkApiStatus: Erro/Inesperado - ", response.status, response.data);
+                setApiStatus(`API IA: Erro (${response.status} - ${response.data?.error || response.data?.status || 'Resp. inesperada'})`);
             }
         } catch (error: any) {
-            let statusMsg = 'API IA: Erro Desconhecido na Verificação';
-            if (axios.isAxiosError(error) && error.code === 'ECONNABORTED') statusMsg = 'API IA: Timeout';
-            else if (axios.isAxiosError(error) && error.response) {
-                statusMsg = `API IA: Erro (${error.response.status} - ${error.response.data?.error || error.response.data?.status || 'Não encontrado ou erro'})`;
+            let statusMsg = 'API IA: Erro Desconhecido';
+            if (axios.isAxiosError(error)) {
+                if (error.code === 'ECONNABORTED') statusMsg = 'API IA: Timeout';
+                else if (error.response) statusMsg = `API IA: Erro (${error.response.status} - ${error.response.data?.error || 'Detalhe indisponível'})`;
+                else if (error.request) statusMsg = 'API IA: Offline/Sem Resposta';
             }
-            else if (axios.isAxiosError(error) && error.request) statusMsg = 'API IA: Offline/Sem Resposta';
             setApiStatus(statusMsg);
-            console.error("[ChatPage] Erro em checkApiStatus:", error.response?.data || error.message || error);
-        } finally {
-            console.log("[ChatPage] checkApiStatus finalizado.");
         }
     }, [API_LLM_URL]);
 
@@ -243,9 +240,8 @@ export default function ChatPage({ }: ChatPageProps) {
     };
 
     const handleSendMessage = async () => {
-        console.log("[ChatPage] handleSendMessage - Token:", token ? token.substring(0,10)+"..." : "Token NULO/UNDEFINED");
         if (!input.trim() || loading || !token) {
-            if(!token) console.warn("[ChatPage] handleSendMessage: Tentativa de enviar mensagem sem token.");
+            if(!token) toast({title: "Autenticação Necessária", description: "Por favor, faça login para usar o chat.", variant: "destructive"});
             return;
         }
 
@@ -254,7 +250,6 @@ export default function ChatPage({ }: ChatPageProps) {
         setLoading(true);
         const currentInput = input;
         setInput('');
-        console.log("[ChatPage] Enviando mensagem:", currentInput);
 
         try {
             const currentContext = contextLoading ? "Aguardando carregamento do contexto..." : context;
@@ -262,11 +257,11 @@ export default function ChatPage({ }: ChatPageProps) {
             
             const requestBody = {
                 prompt: prompt,
-                history: messages.slice(-10).map(m => ({role: m.role, content: m.content}))
+                history: messages.slice(-10).map(m => ({role: m.role, content: m.content})) // Envia as últimas 10 mensagens
             };
 
             const response = await axios.post(API_LLM_URL, requestBody, { 
-                timeout: 90000,
+                timeout: 90000, // 90 segundos
                 headers: { Authorization: `Bearer ${token}` }
             });
             
@@ -277,18 +272,14 @@ export default function ChatPage({ }: ChatPageProps) {
                 timestamp: Date.now()
             };
             setMessages(prev => [...prev, assistantResponse]);
-            console.log("[ChatPage] Resposta da IA recebida:", assistantResponse.content.substring(0,100)+"...");
 
         } catch (error: any) {
             let errorMsg = "Falha ao comunicar com a IA.";
-            if (axios.isAxiosError(error) && error.response?.data?.error) {
-                errorMsg = error.response.data.error;
-            } else if (error.message) {
-                errorMsg = error.message;
-            }
+            if (axios.isAxiosError(error) && error.response?.data?.error) errorMsg = error.response.data.error;
+            else if (error.message) errorMsg = error.message;
+            
             setMessages(prev => [...prev, { id: uuidv4(), role: 'assistant', content: `Erro: ${errorMsg}`, error: errorMsg, timestamp: Date.now() }]);
             toast({ title: "Erro na Comunicação com IA", description: errorMsg, variant: "destructive", duration: 7000 });
-            console.error("[ChatPage] Erro em handleSendMessage:", error.response?.data || error);
         } finally {
             setLoading(false);
             requestAnimationFrame(() => scrollToBottom(chatEndRef));
@@ -303,7 +294,7 @@ export default function ChatPage({ }: ChatPageProps) {
     };
 
     const saveConversation = () => {
-        if (messages.length <= 1) {
+        if (messages.length <= 1) { // A mensagem inicial do assistente não conta
             toast({ title: "Conversa vazia", description: "Não há mensagens para salvar", variant: "default" });
             return;
         }
@@ -319,30 +310,23 @@ export default function ChatPage({ }: ChatPageProps) {
             localStorage.setItem('savedConversations_usbMktChat', JSON.stringify(updatedConversations));
             toast({ title: "Conversa salva", description: "Você pode acessá-la na aba Histórico" });
         } catch (e) {
-            console.error("Erro ao salvar conversa no localStorage:", e);
             toast({ title: "Erro ao Salvar", description: "Não foi possível salvar no localStorage.", variant: "destructive" });
         }
     };
 
     const loadSavedConversations = useCallback(() => {
-        console.log("[ChatPage] Carregando conversas salvas do localStorage...");
         try {
             const saved = localStorage.getItem('savedConversations_usbMktChat');
             if (saved) {
                 const parsed = JSON.parse(saved);
                 if (Array.isArray(parsed) && parsed.every(conv => conv.id && conv.title && conv.date && Array.isArray(conv.messages))) {
                     setSavedConversations(parsed);
-                    console.log(`[ChatPage] ${parsed.length} conversas carregadas.`);
                 } else {
-                    console.warn("[ChatPage] Formato inválido das conversas salvas no localStorage. Removendo item.");
                     localStorage.removeItem('savedConversations_usbMktChat');
                 }
-            } else {
-                console.log("[ChatPage] Nenhuma conversa salva encontrada no localStorage.");
             }
         } catch (e) {
-            console.error("[ChatPage] Erro ao carregar conversas do localStorage:", e);
-            toast({ title: "Erro ao Carregar Histórico", description: "Não foi possível ler o histórico salvo.", variant: "destructive" });
+            toast({ title: "Erro ao Carregar Histórico", description: "Não foi possível ler o histórico.", variant: "destructive" });
         }
     }, [toast]);
 
@@ -363,43 +347,40 @@ export default function ChatPage({ }: ChatPageProps) {
         setSavedConversations(updatedConversations);
         try {
             localStorage.setItem('savedConversations_usbMktChat', JSON.stringify(updatedConversations));
-            toast({ title: "Conversa removida", description: "A conversa foi removida do histórico" });
+            toast({ title: "Conversa removida" });
         } catch (e) {
-            console.error("Erro ao remover conversa do localStorage:", e);
-            toast({ title: "Erro ao Remover", description: "Não foi possível atualizar o histórico salvo.", variant: "destructive" });
+            toast({ title: "Erro ao Remover", description: "Falha ao atualizar histórico.", variant: "destructive" });
         }
     };
 
     const clearConversation = () => {
         setMessages([{ id: uuidv4(), role: 'assistant', content: 'Chat limpo. Como posso ajudar?', timestamp: Date.now() }]);
-        toast({ title: "Chat limpo", description: "Todas as mensagens foram removidas" });
+        toast({ title: "Chat limpo" });
     };
 
     useEffect(() => {
         if (!authLoading && !isAuthenticated) {
             router.push('/login');
         } else if (!authLoading && isAuthenticated) {
-            console.log("[ChatPage] Autenticado. Carregando dados iniciais.");
             loadSavedConversations();
-            fetchCampaignOptions(); 
-            checkApiStatus();
+            if (token) { // Garante que o token existe antes de chamar
+              fetchCampaignOptions(); 
+              checkApiStatus();
+            }
         }
-    }, [authLoading, isAuthenticated, router, loadSavedConversations, fetchCampaignOptions, checkApiStatus]);
+    }, [authLoading, isAuthenticated, router, loadSavedConversations, fetchCampaignOptions, checkApiStatus, token]); // Adicionado token
 
     useEffect(() => {
-        // Só gera contexto se autenticado, sem erro na página, e se as opções de campanha já foram carregadas
-        // E se o contexto não estiver já carregando.
-        if (isAuthenticated && !pageError && !campaignsLoading && !contextLoading) {
-            console.log("[ChatPage] Disparando generateContext. contextCampaignId:", contextCampaignId, "campaignsLoading:", campaignsLoading, "contextLoading:", contextLoading);
+        if (isAuthenticated && !pageError && !campaignsLoading && !contextLoading && token) { // Adicionado token
             generateContext();
         }
-    }, [isAuthenticated, pageError, campaignsLoading, contextCampaignId, token]); // Removido generateContext e contextLoading
+    }, [isAuthenticated, pageError, campaignsLoading, contextCampaignId, generateContext, contextLoading, token]); // Adicionado token e generateContext
 
     useEffect(() => { scrollToBottom(chatEndRef); }, [messages]);
 
-    if (authLoading) return <Layout><div className="flex h-[calc(100vh-100px)] w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /><span className="ml-3 text-muted-foreground">Verificando autenticação...</span></div></Layout>;
+    if (authLoading) return <Layout><div className="flex h-[calc(100vh-100px)] w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /><span className="ml-3 text-muted-foreground">Verificando...</span></div></Layout>;
     if (!isAuthenticated && !authLoading) return null;
-    if (pageError) return <Layout><div className="flex h-[calc(100vh-100px)] w-full items-center justify-center text-center text-red-400 p-6"><div><h2 className="text-lg font-semibold mb-2">Erro Crítico</h2><p className="text-sm">{pageError}</p><Button onClick={fetchCampaignOptions} className={cn(primaryNeumorphicButtonStyle, 'mt-4')}><RefreshCw className="mr-2 h-4 w-4" /> Tentar Recarregar Campanhas</Button></div></div></Layout>;
+    if (pageError) return <Layout><div className="flex h-[calc(100vh-100px)] w-full items-center justify-center text-center text-red-400 p-6"><div><h2 className="text-lg font-semibold mb-2">Erro Crítico</h2><p className="text-sm">{pageError}</p><Button onClick={fetchCampaignOptions} className={cn(primaryNeumorphicButtonStyle, 'mt-4')}><RefreshCw className="mr-2 h-4 w-4" /> Tentar Recarregar</Button></div></div></Layout>;
 
     return (
         <Layout>
@@ -427,7 +408,7 @@ export default function ChatPage({ }: ChatPageProps) {
                                         <div className="flex items-center gap-1 flex-shrink-0">
                                             <Select value={contextCampaignId} onValueChange={(val) => setContextCampaignId(val)} disabled={contextLoading || campaignsLoading}>
                                                 <SelectTrigger className={cn(neumorphicInputStyle, "h-7 w-[160px] md:w-[180px] bg-[#141414]/60 text-xs")} title={contextCampaignId === "__general__" ? "Contexto Geral" : campaignOptions.find(c => String(c.id) === contextCampaignId)?.name ?? "Selecionar Contexto"}><SelectValue placeholder={campaignsLoading ? "Carregando..." : "Selecione o contexto"} /></SelectTrigger>
-                                                <SelectContent>
+                                                <SelectContent className="bg-[#1e2128] border-[#1E90FF]/30 text-white">
                                                     <SelectItem value="__general__">Contexto Geral</SelectItem>
                                                     {campaignOptions.map(camp => (<SelectItem key={String(camp.id)} value={String(camp.id)}>{camp.name}</SelectItem>))}
                                                 </SelectContent>
@@ -463,7 +444,7 @@ export default function ChatPage({ }: ChatPageProps) {
                                 <Card className={cn(cardStyle)}>
                                     <CardHeader className="p-4"><CardTitle className="text-base font-semibold flex items-center gap-2"><History className="h-5 w-5" style={primaryIconStyle} />Histórico de Conversas Salvas</CardTitle></CardHeader>
                                     <CardContent className="p-4 pt-0"><ScrollArea className="h-[calc(100vh-265px)] pr-3">
-                                        {savedConversations.length === 0 ? (<div className="flex flex-col items-center justify-center h-32 text-muted-foreground"><MessageSquare className="h-8 w-8 mb-2 opacity-50" /><p className="text-center text-sm">Nenhuma conversa salva ainda.</p></div>)
+                                        {savedConversations.length === 0 ? (<div className="flex flex-col items-center justify-center h-32 text-muted-foreground"><MessageSquare className="h-8 w-8 mb-2 opacity-50" /><p className="text-center text-sm">Nenhuma conversa salva.</p></div>)
                                         : (<div className="space-y-2">{[...savedConversations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((conv) => (<Card key={conv.id} className={cn(insetCardStyle, "p-3")}><div className="flex items-center justify-between gap-2"><div className="flex-1 overflow-hidden"><h3 className="text-sm font-medium truncate" title={conv.title}>{conv.title}</h3><p className="text-xs text-muted-foreground">{format(parseISO(conv.date), "dd/MM/yy HH:mm", { locale: ptBR })}</p></div><div className="flex gap-1 flex-shrink-0"><Button onClick={() => loadConversation(conv.id)} variant="ghost" size="icon" className={cn(neumorphicGhostButtonStyle, "h-7 w-7")} title="Carregar Conversa"><MessageSquare className="h-3.5 w-3.5" /></Button><Button onClick={() => deleteConversation(conv.id)} variant="ghost" size="icon" className={cn(neumorphicGhostButtonStyle, "h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-900/30")} title="Excluir Conversa"><Trash2 className="h-3.5 w-3.5" /></Button></div></div></Card>))}</div>)}
                                     </ScrollArea></CardContent>
                                 </Card>
