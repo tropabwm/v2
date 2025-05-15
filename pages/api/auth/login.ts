@@ -1,4 +1,4 @@
-// pages/api/login.ts
+// pages/api/auth/login.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -23,11 +23,9 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
     console.error("\nFATAL ERROR: JWT_SECRET is not defined in environment variables.\n");
     if (process.env.NODE_ENV === 'production') {
-        process.exit(1); // Em produção, é crítico.
+        process.exit(1); 
     } else {
         console.warn("JWT_SECRET não definido. Usando um segredo padrão APENAS PARA DESENVOLVIMENTO. NÃO USE EM PRODUÇÃO.");
-        // Em desenvolvimento, você poderia ter um fallback, mas é melhor definir no .env.local
-        // process.env.JWT_SECRET = "fallback_dev_secret_ بسیار_ناامن"; // Exemplo de fallback ruim
     }
 }
 
@@ -51,7 +49,6 @@ export default async function handler(
       return res.status(400).json({ message: 'Tipo inválido para email ou senha.' });
   }
 
-  // Bypass de desenvolvimento (MANTIDO, mas com aviso se JWT_SECRET não estiver definido)
   if (email === 'adm@example.com' && password === '123456' && process.env.FORCE_AUTH_BYPASS === 'true') {
       if (!JWT_SECRET) return res.status(500).json({ message: "Configuração crítica do servidor ausente (JWT_SECRET) para bypass."});
       console.log("[BYPASS DEV] Login temporário concedido para 'adm@example.com'");
@@ -67,7 +64,7 @@ export default async function handler(
   }
 
 
-  if (!JWT_SECRET) { // Checagem final se não for bypass e JWT_SECRET ainda não estiver definido
+  if (!JWT_SECRET) { 
     console.error("[API Login] ERRO CRÍTICO: JWT_SECRET não está configurado no ambiente.");
     return res.status(500).json({ message: "Erro de configuração do servidor (JWT)." });
   }
@@ -115,7 +112,7 @@ export default async function handler(
         console.error(`[API Login] Falha assíncrona ao atualizar info de login para user ID ${user.id}:`, updateError);
     });
 
-    const payload = { userId: user.id, username: user.username, email: user.email }; // Adicionando email ao payload do JWT
+    const payload = { userId: user.id, username: user.username, email: user.email }; 
     console.log(`[API Login] Gerando token JWT para usuário: ${user.username} (ID: ${user.id}) com expiração em ${JWT_EXPIRES_IN}`);
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
@@ -128,7 +125,6 @@ export default async function handler(
 
   } catch (error: any) {
     console.error('[API Login] Erro:', error);
-    // Se o erro for 'ER_BAD_FIELD_ERROR' e incluir 'password_hash', é provável que a coluna não exista.
     if (error.code === 'ER_BAD_FIELD_ERROR' && error.sqlMessage && error.sqlMessage.includes('password_hash')) {
         console.error("[API Login] ERRO CRÍTICO DE SCHEMA: A coluna 'password_hash' não foi encontrada na tabela 'users'. Verifique lib/db-mysql.ts e o schema do banco.");
         return res.status(500).json({
