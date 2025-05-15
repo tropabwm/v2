@@ -10,7 +10,7 @@ interface AggregatedMetrics {
     totalSales: number;
     totalCost: number;
     totalImpressions: number;
-    totalBudgetSum: number; // Renamed from totalBudget to totalBudgetSum for clarity w/ campaigns table aggregation
+    totalBudgetSum: number;
 }
 
 interface CalculatedMetrics extends AggregatedMetrics {
@@ -37,8 +37,8 @@ interface DailyDataPoint {
 interface DashboardApiResponse {
     totals: CalculatedMetrics;
     dailyData: DailyDataPoint[];
-    totalUsers?: number; // Optional, depending on DB schema
-    userChange?: number | null; // Optional, depending on DB schema
+    totalUsers?: number;
+    userChange?: number | null;
     revenueChange?: number | null;
     clickChange?: number | null;
     salesChange?: number | null;
@@ -53,10 +53,9 @@ const calculateChange = (current: number | null | undefined, previous: number | 
     const currentNum = Number(current ?? 0);
     const previousNum = Number(previous ?? 0);
     if (previousNum === 0) {
-         if (currentNum === 0) return 0; // No change if both are zero
-         return null; // Infinite growth from zero
+         if (currentNum === 0) return 0;
+         return null;
     }
-    // Use a small epsilon to avoid division by near-zero
     if (Math.abs(previousNum) < 1e-9) {
          return currentNum === 0 ? 0 : null;
     }
@@ -69,9 +68,8 @@ async function getAggregatedData(
     connection: mysql.PoolConnection,
     startDate: string,
     endDate: string,
-    campaignId: string | null // campaignId is string (UUID) or null
+    campaignId: string | null
 ): Promise<AggregatedMetrics> {
-    // REMOVIDO: Comentário '-- CORRIGIDO: Usando d.date' dentro da string SQL
     let sql = `
         SELECT
             COALESCE(SUM(d.revenue), 0) AS totalRevenue,
@@ -85,7 +83,7 @@ async function getAggregatedData(
                 WHERE (? IS NULL OR id = ?)
             ) AS totalBudgetSum
         FROM daily_metrics d
-        WHERE d.date BETWEEN ? AND ?
+        WHERE d.metric_date BETWEEN ? AND ? 
     `;
      const params: (string | number | null)[] = [campaignId, campaignId, startDate, endDate];
     if (campaignId !== null) {
@@ -101,7 +99,7 @@ async function getAggregatedData(
         totalSales: Number(result.totalSales),
         totalCost: Number(result.totalCost),
         totalImpressions: Number(result.totalImpressions),
-        totalBudgetSum: Number(result.totalBudgetSum) // Return as totalBudgetSum
+        totalBudgetSum: Number(result.totalBudgetSum)
     };
 }
 
@@ -109,26 +107,25 @@ async function getDailyData(
     connection: mysql.PoolConnection,
     startDate: string,
     endDate: string,
-    campaignId: string | null // campaignId is string (UUID) or null
+    campaignId: string | null
 ): Promise<DailyDataPoint[]> {
-    // REMOVIDO: Comentário '-- CORRIGIDO: Usando date' dentro da string SQL
     let sql = `
         SELECT
-            DATE_FORMAT(date, '%Y-%m-%d') AS date, -- Using date
+            DATE_FORMAT(metric_date, '%Y-%m-%d') AS date, 
             COALESCE(SUM(revenue), 0) AS revenue,
             COALESCE(SUM(clicks), 0) AS clicks,
             COALESCE(SUM(impressions), 0) AS impressions,
             COALESCE(SUM(conversions), 0) AS conversions,
             COALESCE(SUM(cost), 0) AS cost
         FROM daily_metrics
-        WHERE date BETWEEN ? AND ?
+        WHERE metric_date BETWEEN ? AND ? 
     `;
-    const params: (string | null)[] = [startDate, endDate]; // Type of params
+    const params: (string | null)[] = [startDate, endDate];
     if (campaignId !== null) {
         sql += ' AND campaign_id = ?';
         params.push(campaignId);
     }
-    sql += ' GROUP BY date ORDER BY date ASC'; // Group and order by the actual date column alias
+    sql += ' GROUP BY metric_date ORDER BY metric_date ASC'; 
     console.log("[API DB Query Daily]", connection.format(sql, params));
     const [rows] = await connection.query<mysql.RowDataPacket[]>(sql, params);
     return rows.map(row => ({
@@ -142,13 +139,12 @@ async function getDailyData(
 }
 
 function calculateDerivedMetrics(data: AggregatedMetrics): CalculatedMetrics {
-    const { totalClicks, totalImpressions, totalSales, totalCost, totalRevenue, totalBudgetSum } = data; // Use totalBudgetSum
+    const { totalClicks, totalImpressions, totalSales, totalCost, totalRevenue, totalBudgetSum } = data;
     const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : null;
     const cpc = totalClicks > 0 ? totalCost / totalClicks : null;
     const conversionRate = totalClicks > 0 ? (totalSales / totalClicks) * 100 : null;
     const costPerConversion = totalSales > 0 ? totalCost / totalSales : null;
     const roi = totalCost > 0 ? ((totalRevenue - totalCost) / totalCost) * 100 : (totalRevenue > 0 ? Infinity : (totalRevenue === 0 ? 0 : null));
-    // Calculation for useBudget and budgetRemaining uses totalBudgetSum
     const useBudget = totalBudgetSum !== undefined && totalBudgetSum !== null && totalBudgetSum > 0 ? (totalCost / totalBudgetSum) * 100 : (totalBudgetSum === 0 ? 0 : null);
     const budgetRemaining = totalBudgetSum !== undefined && totalBudgetSum !== null ? totalBudgetSum - totalCost : null;
     const realProfit = totalRevenue - totalCost;
@@ -158,7 +154,7 @@ function calculateDerivedMetrics(data: AggregatedMetrics): CalculatedMetrics {
         return parseFloat(value.toFixed(2));
     };
     return {
-        totalRevenue, totalClicks, totalSales, totalCost, totalImpressions, totalBudgetSum, // Include totalBudgetSum
+        totalRevenue, totalClicks, totalSales, totalCost, totalImpressions, totalBudgetSum,
         ctr: safeMetric(ctr),
         cpc: safeMetric(cpc),
         conversionRate: safeMetric(conversionRate),
@@ -182,34 +178,25 @@ export default async function handler(
     if (!startDateStr || !endDateStr || typeof startDateStr !== 'string' || typeof endDateStr !== 'string') {
         return res.status(400).json({ error: 'startDate e endDate são obrigatórios.' });
     }
-    // Ensure dates are parsed correctly and include time for BETWEEN clause accuracy
     const start = startOfDay(parseISO(startDateStr));
     const end = endOfDay(parseISO(endDateStr));
     if (!isValid(start) || !isValid(end) || end < start) {
         return res.status(400).json({ error: 'Datas inválidas.' });
     }
 
-    // Treat campaignId as string (UUID) or null
     const campaignId: string | null = (campaignIdStr && typeof campaignIdStr === 'string' && campaignIdStr.toLowerCase() !== 'all' && campaignIdStr !== '')
-        ? campaignIdStr // Use the string value if not 'all' or empty
-        : null; // Otherwise treat as null (all campaigns)
-
-    // Optional: Add UUID validation for campaignId if it's not null
-    // const isUuid = (uuid: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
-    // if (campaignId !== null && !isUuid(campaignId)) {
-    //     return res.status(400).json({ error: 'ID da campanha inválido.' });
-    // }
-
+        ? campaignIdStr
+        : null;
 
     let connection: mysql.PoolConnection | null = null;
     try {
         const pool = getDbPool();
         connection = await pool.getConnection();
-        // await initializeAllTables(); // Avoid running this on every API call in production
+        // await initializeAllTables(); // Considerar remover ou otimizar em produção
 
-        const daysInPeriod = differenceInDays(end, start) + 1; // Include both start and end day
+        const daysInPeriod = differenceInDays(end, start) + 1;
         const prevEndDate = subDays(start, 1);
-        const prevStartDate = subDays(prevEndDate, daysInPeriod -1); // Adjust for differenceInDays
+        const prevStartDate = subDays(prevEndDate, daysInPeriod -1);
 
          const currentStartDateSql = format(start, 'yyyy-MM-dd HH:mm:ss');
          const currentEndDateSql = format(end, 'yyyy-MM-dd HH:mm:ss');
@@ -227,23 +214,18 @@ export default async function handler(
         const revenueChange = calculateChange(currentCalculated.totalRevenue, prevCalculated.totalRevenue);
         const clickChange = calculateChange(currentCalculated.totalClicks, prevCalculated.totalClicks);
         const salesChange = calculateChange(currentCalculated.totalSales, prevCalculated.totalSales);
-        // Ensure we compare metric change only if both periods had values
         const conversionRateChange = calculateChange(currentCalculated.conversionRate, prevCalculated.conversionRate);
         const useBudgetChange = calculateChange(currentCalculated.useBudget, prevCalculated.useBudget);
         const roiChange = calculateChange(currentCalculated.roi, prevCalculated.roi);
         const profitChange = calculateChange(currentCalculated.realProfit, prevCalculated.realProfit);
         const budgetRemainingChange = calculateChange(currentCalculated.budgetRemaining, prevCalculated.budgetRemaining);
 
-         // Handle user_id if it exists in daily_metrics.
-         // Check column existence first to avoid SQL errors if schema doesn't match.
          let totalUsers = 0;
          let userChangeVal: number | null = null;
          try {
-             // Use information_schema or SHOW COLUMNS, but SHOW COLUMNS is simpler here
              const [cols]: any = await connection.query(`SHOW COLUMNS FROM daily_metrics LIKE 'user_id'`);
              if (cols.length > 0) {
-                 // If user_id column exists, perform user count query
-                 const userCountQuery = `SELECT COUNT(DISTINCT user_id) as totalUsers FROM daily_metrics WHERE date BETWEEN ? AND ? ${campaignId !== null ? ' AND campaign_id = ?' : ''}`; // Using 'date' here also
+                 const userCountQuery = `SELECT COUNT(DISTINCT user_id) as totalUsers FROM daily_metrics WHERE metric_date BETWEEN ? AND ? ${campaignId !== null ? ' AND campaign_id = ?' : ''}`;
                  const userCountParams: (string | null)[] = [currentStartDateSql, currentEndDateSql];
                  if (campaignId !== null) userCountParams.push(campaignId);
                  const [userRows]: any = await connection.query(userCountQuery, userCountParams);
@@ -255,12 +237,10 @@ export default async function handler(
                  const prevTotalUsers = prevUserRows[0]?.totalUsers ? Number(prevUserRows[0].totalUsers) : 0;
                  userChangeVal = calculateChange(totalUsers, prevTotalUsers);
              } else {
-                 // Log warning if column is missing, but don't fail the API
                  console.warn("[API Dashboard] Coluna 'user_id' não encontrada em 'daily_metrics'. totalUsers e userChange não serão calculados.");
              }
          } catch(dbError: any) {
              console.error("[API Dashboard] Erro ao verificar/contar user_id:", dbError);
-             // Log the error but allow the rest of the API to proceed
              console.warn("[API Dashboard] totalUsers e userChange não serão calculados devido ao erro do DB.");
          }
 
@@ -268,8 +248,8 @@ export default async function handler(
         const responseData: DashboardApiResponse = {
             totals: currentCalculated,
             dailyData: currentDaily,
-            totalUsers: totalUsers, // Will be 0 if user_id column is missing/error
-            userChange: userChangeVal, // Will be null if user_id column is missing/error
+            totalUsers: totalUsers,
+            userChange: userChangeVal,
             revenueChange: revenueChange,
             clickChange: clickChange,
             salesChange: salesChange,
