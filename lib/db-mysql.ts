@@ -101,7 +101,6 @@ async function addColumnIfNotExists(connection: mysql.PoolConnection | mysql.Poo
         }
     } catch (error: any) {
         console.error(`MySQL: Falha crítica ao verificar/adicionar coluna ${tableName}.${columnName}. Erro:`, error.message);
-        // Não relançar o erro aqui para permitir que outras inicializações continuem, mas o log é importante.
     }
 }
 
@@ -129,7 +128,6 @@ async function addForeignKeyIfNotExists(
         }
     } catch (error: any) {
         console.error(`MySQL: Falha crítica ao verificar/adicionar FK ${constraintName} em ${tableName}. Erro:`, error.message);
-         // Não relançar o erro aqui para permitir que outras inicializações continuem
     }
 }
 
@@ -182,7 +180,6 @@ export async function initializeCampaignsTable(db: mysql.Pool) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `, [], `Tabela ${tableName} (CREATE IF NOT EXISTS) OK.`);
 
-    // Adicionar chamadas explícitas para garantir que as colunas existam
     await addColumnIfNotExists(db, tableName, 'user_id', 'INT NULL');
     await addColumnIfNotExists(db, tableName, 'client_name', 'VARCHAR(255) NULL');
     await addColumnIfNotExists(db, tableName, 'product_name', 'VARCHAR(255) NULL');
@@ -309,6 +306,7 @@ export async function initializeDailyMetricsTable(db: mysql.Pool) {
         CREATE TABLE IF NOT EXISTS ${db.escapeId(tableName)} (
             id INT AUTO_INCREMENT PRIMARY KEY,
             campaign_id VARCHAR(36) NOT NULL,
+            user_id INT NULL,
             metric_date DATE NOT NULL,
             clicks INT DEFAULT 0,
             impressions INT DEFAULT 0,
@@ -318,12 +316,22 @@ export async function initializeDailyMetricsTable(db: mysql.Pool) {
             leads INT DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_dm_campaign_date (campaign_id, metric_date),
-            INDEX idx_dm_metric_date (metric_date)
+            UNIQUE KEY unique_dm_campaign_user_date (campaign_id, user_id, metric_date),
+            INDEX idx_dm_metric_date (metric_date),
+            INDEX idx_dm_user_id (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `, [], `Tabela ${tableName} (CREATE IF NOT EXISTS) OK.`);
-    await addColumnIfNotExists(db, tableName, 'metric_date', 'DATE NOT NULL'); // Já estava, mas bom garantir
+    
     await addColumnIfNotExists(db, tableName, 'campaign_id', 'VARCHAR(36) NOT NULL');
+    await addColumnIfNotExists(db, tableName, 'user_id', 'INT NULL');
+    await addColumnIfNotExists(db, tableName, 'metric_date', 'DATE NOT NULL');
+    await addColumnIfNotExists(db, tableName, 'clicks', 'INT DEFAULT 0');
+    await addColumnIfNotExists(db, tableName, 'impressions', 'INT DEFAULT 0');
+    await addColumnIfNotExists(db, tableName, 'conversions', 'INT DEFAULT 0');
+    await addColumnIfNotExists(db, tableName, 'cost', 'DECIMAL(15, 2) DEFAULT 0.00');
+    await addColumnIfNotExists(db, tableName, 'revenue', 'DECIMAL(15, 2) DEFAULT 0.00');
+    await addColumnIfNotExists(db, tableName, 'leads', 'INT DEFAULT 0');
+    
     console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
@@ -400,6 +408,7 @@ export async function initializeAllTables() {
         await addForeignKeyIfNotExists(currentPool, 'alerts', 'fk_alerts_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'alerts', 'fk_alerts_user_id','FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE');
         await addForeignKeyIfNotExists(currentPool, 'daily_metrics', 'fk_dm_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE');
+        await addForeignKeyIfNotExists(currentPool, 'daily_metrics', 'fk_dm_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL'); // FK para daily_metrics.user_id
         await addForeignKeyIfNotExists(currentPool, 'mcp_conversation_history', 'fk_mcp_hist_user_id','FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'mcp_saved_conversations', 'fk_mcp_saved_user_id','FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE');
 
