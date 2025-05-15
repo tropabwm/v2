@@ -47,7 +47,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const router = useRouter();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://v2-production-cc95.up.railway.app/';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://v2-production-cc95.up.railway.app';
 
   const processAndSetToken = useCallback((token: string | null): boolean => {
     if (token) {
@@ -112,7 +112,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
         // CORRIGIDO: Removido /auth/ da URL
-        const response = await axios.post(`${API_URL}/api/login`, {
+        const response = await axios.post(`${API_URL}/api/auth/login`, {
             email: emailOrUsername,
             password,
         });
@@ -147,7 +147,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
         // CORRIGIDO: Removido /auth/ da URL
-        const response = await axios.post(`${API_URL}/api/register`, {
+        const response = await axios.post(`${API_URL}/api/auth/register`, {
             username,
             email,
             password,
