@@ -3,6 +3,15 @@
 # 1. Base Image (Use uma versão LTS ou a que você usa localmente)
 FROM node:18-slim
 
+# Instalação do ffmpeg (necessário para fluent-ffmpeg)
+# Mudar para usuário root temporariamente para instalar pacotes do sistema
+USER root
+RUN apt-get update && \
+    apt-get install -y ffmpeg --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+# Voltar para o usuário padrão da imagem node (geralmente 'node')
+USER node
+
 # 2. Set working directory
 WORKDIR /app
 
@@ -11,7 +20,7 @@ ENV NODE_ENV=production
 
 # 4. Copiar package.json e package-lock.json PRIMEIRO
 # Isso aproveita o cache do Docker se esses arquivos não mudarem
-COPY package*.json ./
+COPY --chown=node:node package*.json ./
 
 # 5. Instalar Dependências
 # Removemos a flag --omit=dev para instalar devDependencies (necessárias para o build step)
@@ -23,7 +32,8 @@ RUN npm install --legacy-peer-deps
 ENV PATH="/app/node_modules/.bin:$PATH"
 
 # 7. Copiar o resto do código da aplicação
-COPY . .
+# Usar --chown para garantir que o usuário 'node' seja o proprietário dos arquivos copiados
+COPY --chown=node:node . .
 
 # 8. Construir a Aplicação
 # Adicionamos rm -rf .next/cache de volta APENAS para tentar mitigar qualquer cache persistente do Next.js no ambiente de build
