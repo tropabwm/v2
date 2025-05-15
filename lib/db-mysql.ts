@@ -170,11 +170,11 @@ export async function initializeCampaignsTable(db: mysql.Pool) {
             platform JSON NULL,
             daily_budget DECIMAL(15, 2) NULL,
             segmentation TEXT NULL,
-            adFormat JSON NULL,
+            ad_format JSON NULL,        /* CORRIGIDO */
             duration INT NULL,
-            avgTicket DECIMAL(15, 2) NULL,
-            purchaseFrequency DECIMAL(10, 2) NULL,
-            customerLifespan INT NULL,
+            avg_ticket DECIMAL(15, 2) NULL, /* CORRIGIDO */
+            purchase_frequency DECIMAL(10, 2) NULL, /* CORRIGIDO */
+            customer_lifespan INT NULL, /* CORRIGIDO */
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
