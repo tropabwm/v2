@@ -40,8 +40,8 @@ type BudgetData = {
     creativeCost?: number; creativeCostFmt?: string; creativePerc?: number;
     operationalCost?: number; operationalCostFmt?: string; opPerc?: number;
     unallocatedValue?: number; unallocatedFmt?: string; unallocatedPerc?: number;
-    chartImageUrl?: string | null; // Mantido para fallback se pieChartData não vier
-    pieChartData?: PieChartDataItem[]; // NOVO: Dados para o gráfico de pizza Recharts
+    chartImageUrl?: string | null;
+    pieChartData?: PieChartDataItem[];
 };
 type CampaignOption = Pick<Campaign, 'id' | 'name'>;
 
@@ -58,13 +58,12 @@ const formatPercent = (value: number | undefined | null, defaultValue = '0.0%'):
     return `${numValue.toFixed(1)}%`;
 };
 
-// Estilos Neumórficos e Cores (Reutilizados de Metrics/Index)
 const neonColor = "#1E90FF";
 const cardStyle = "bg-[#141414]/80 backdrop-blur-sm shadow-[5px_5px_10px_rgba(0,0,0,0.4),-5px_-5px_10px_rgba(255,255,255,0.05)] rounded-lg border-none";
 const neumorphicInputStyle = "bg-[#141414] text-white shadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-2px_-2px_4px_rgba(255,255,255,0.05)] placeholder:text-gray-500 border-none focus:ring-2 focus:ring-[#1E90FF] focus:ring-offset-2 focus:ring-offset-[hsl(var(--background))]";
 const baseLabelStyle = "text-xs text-gray-400 mb-1 block";
 const baseTitleStyle = "text-lg font-semibold text-white";
-const axisTickColor = "#a0aec0"; // Para gráficos Recharts
+const axisTickColor = "#a0aec0";
 
 interface BudgetStatCardProps {
     icon: React.ElementType;
@@ -86,11 +85,11 @@ const BudgetStatCard: React.FC<BudgetStatCardProps> = ({ icon: Icon, label, valu
     </div>
 );
 
-const costColors = { // Cores para o gráfico de pizza e lista de custos
-    traffic: '#3b82f6',    // Azul
-    creative: '#22c55e',  // Verde
-    operational: '#eab308', // Amarelo
-    unallocated: '#6b7280' // Cinza
+const costColors = {
+    traffic: '#3b82f6',
+    creative: '#22c55e',
+    operational: '#eab308',
+    unallocated: '#6b7280'
 };
 
 export default function BudgetPage() {
@@ -119,14 +118,13 @@ export default function BudgetPage() {
                     campaignId: selectedCampaignId || 'all',
                 }
             });
-            // Adicionar cores aos dados do gráfico de pizza se eles vierem da API
             const dataWithColors = response.data;
             if (dataWithColors.pieChartData) {
                 dataWithColors.pieChartData = dataWithColors.pieChartData.map(item => {
                     if (item.name.toLowerCase().includes('tráfego')) return {...item, color: costColors.traffic};
                     if (item.name.toLowerCase().includes('criativo')) return {...item, color: costColors.creative};
                     if (item.name.toLowerCase().includes('operacional')) return {...item, color: costColors.operational};
-                    return {...item, color: costColors.unallocated}; // Default para Não Alocado ou outros
+                    return {...item, color: costColors.unallocated};
                 });
             }
             setBudgetData(dataWithColors);
@@ -174,7 +172,7 @@ export default function BudgetPage() {
         const y = cy + radius * Math.sin(-midAngle * RADIAN);
         const percentage = (percent * 100).toFixed(0);
 
-        if (parseFloat(percentage) < 5) return null; // Não renderizar labels para fatias muito pequenas
+        if (parseFloat(percentage) < 5) return null;
 
         return (
             <text x={x} y={y} fill={color === '#000000' ? '#FFFFFF' : '#FFFFFF'} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="10px" fontWeight="bold" style={{filter: `drop-shadow(0 0 2px ${color}) drop-shadow(0 0 3px rgba(0,0,0,0.7))`}}>
@@ -208,8 +206,12 @@ export default function BudgetPage() {
                             <SelectContent className="bg-[#1e2128] border-[#1E90FF]/30 text-white">
                                 <SelectItem value="all" className="text-xs hover:!bg-[#1E90FF]/20 focus:!bg-[#1E90FF]/20">Todas Campanhas</SelectItem>
                                 {isLoadingCampaigns && <div className="p-2 text-xs text-center text-slate-400">Carregando...</div>}
-                                {!isLoadingCampaigns && campaignOptions.map((c) => (
-                                    <SelectItem key={c.id} value={c.id.toString()} className="text-xs hover:!bg-[#1E90FF]/20 focus:!bg-[#1E90FF]/20">{c.name}</SelectItem>
+                                {!isLoadingCampaigns && campaignOptions
+                                    .filter(c => c && typeof c.id !== 'undefined' && c.id !== null) // Filtra IDs inválidos
+                                    .map((c) => (
+                                        <SelectItem key={c.id!.toString()} value={c.id!.toString()} className="text-xs hover:!bg-[#1E90FF]/20 focus:!bg-[#1E90FF]/20">
+                                            {c.name || 'Campanha sem nome'}
+                                        </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
@@ -261,7 +263,7 @@ export default function BudgetPage() {
                                                         labelLine={false}
                                                         label={renderCustomizedLabel}
                                                         outerRadius={120}
-                                                        innerRadius={60} // Para Donut
+                                                        innerRadius={60}
                                                         fill="#8884d8"
                                                         dataKey="value"
                                                         paddingAngle={3}
@@ -280,7 +282,7 @@ export default function BudgetPage() {
                                                     <Legend wrapperStyle={{ color: axisTickColor, fontSize: '11px', paddingTop: '15px' }} />
                                                 </PieChart>
                                             </ResponsiveContainer>
-                                        ) : budgetData.chartImageUrl ? ( // Fallback para imagem se pieChartData não estiver disponível
+                                        ) : budgetData.chartImageUrl ? (
                                             <Image src={budgetData.chartImageUrl} alt="Gráfico Distribuição de Custos" width={500} height={350} className="object-contain" priority={true} />
                                         ) : (
                                             <div className="text-center text-slate-500 p-6">
