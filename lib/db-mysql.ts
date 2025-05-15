@@ -213,17 +213,35 @@ export async function initializeCreativesTable(db: mysql.Pool) {
             campaign_id VARCHAR(36) NULL,
             user_id INT NULL,
             name VARCHAR(255) NOT NULL,
-            type ENUM('image', 'video', 'text', 'carousel', 'other') DEFAULT 'other',
+            type ENUM('image', 'video', 'text', 'carousel', 'headline', 'body', 'cta', 'other') DEFAULT 'other',
             file_url VARCHAR(1024) NULL,
             content TEXT NULL,
             metrics JSON NULL,
             status ENUM('active', 'inactive', 'draft', 'archived') DEFAULT 'draft',
+            platform JSON NULL,
+            format VARCHAR(255) NULL,
+            publish_date TIMESTAMP NULL,
+            originalFilename VARCHAR(255) NULL,
+            comments TEXT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `, [], `Tabela ${tableName} (CREATE IF NOT EXISTS) OK.`);
-    await addColumnIfNotExists(db, tableName, 'user_id', 'INT NULL');
+
     await addColumnIfNotExists(db, tableName, 'campaign_id', 'VARCHAR(36) NULL');
+    await addColumnIfNotExists(db, tableName, 'user_id', 'INT NULL');
+    await addColumnIfNotExists(db, tableName, 'name', 'VARCHAR(255) NOT NULL');
+    await addColumnIfNotExists(db, tableName, 'type', "ENUM('image', 'video', 'text', 'carousel', 'headline', 'body', 'cta', 'other') DEFAULT 'other'");
+    await addColumnIfNotExists(db, tableName, 'file_url', 'VARCHAR(1024) NULL');
+    await addColumnIfNotExists(db, tableName, 'content', 'TEXT NULL');
+    await addColumnIfNotExists(db, tableName, 'metrics', 'JSON NULL');
+    await addColumnIfNotExists(db, tableName, 'status', "ENUM('active', 'inactive', 'draft', 'archived') DEFAULT 'draft'");
+    await addColumnIfNotExists(db, tableName, 'platform', 'JSON NULL');
+    await addColumnIfNotExists(db, tableName, 'format', 'VARCHAR(255) NULL');
+    await addColumnIfNotExists(db, tableName, 'publish_date', 'TIMESTAMP NULL');
+    await addColumnIfNotExists(db, tableName, 'originalFilename', 'VARCHAR(255) NULL');
+    await addColumnIfNotExists(db, tableName, 'comments', 'TEXT NULL');
+    
     console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
@@ -387,7 +405,7 @@ export async function initializeAllTables() {
     try {
         await initializeUsersTable(currentPool);
         await initializeCampaignsTable(currentPool);
-        await initializeCreativesTable(currentPool);
+        await initializeCreativesTable(currentPool); // Chamada para a função atualizada
         await initializeFlowsTable(currentPool);
         await initializeCopiesTable(currentPool);
         await initializeAlertsTable(currentPool);
@@ -398,17 +416,23 @@ export async function initializeAllTables() {
         console.log("MySQL: Adicionando/Verificando chaves estrangeiras...");
         
         await addForeignKeyIfNotExists(currentPool, 'campaigns', 'fk_campaigns_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'creatives', 'fk_creatives_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'creatives', 'fk_creatives_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'flows', 'fk_flows_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'flows', 'fk_flows_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'copies', 'fk_copies_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'copies', 'fk_copies_creative_id', 'FOREIGN KEY (creative_id) REFERENCES creatives(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'copies', 'fk_copies_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'alerts', 'fk_alerts_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'alerts', 'fk_alerts_user_id','FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE');
+        
         await addForeignKeyIfNotExists(currentPool, 'daily_metrics', 'fk_dm_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE');
-        await addForeignKeyIfNotExists(currentPool, 'daily_metrics', 'fk_dm_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL'); // FK para daily_metrics.user_id
+        await addForeignKeyIfNotExists(currentPool, 'daily_metrics', 'fk_dm_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'mcp_conversation_history', 'fk_mcp_hist_user_id','FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'mcp_saved_conversations', 'fk_mcp_saved_user_id','FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE');
 
