@@ -1,4 +1,16 @@
 // lib/db-mysql.ts
+console.log("--- INICIO VARIAVEIS DE AMBIENTE (db-mysql.ts) ---");
+console.log("DB_HOST:", process.env.DB_HOST);
+console.log("DB_USER:", process.env.DB_USER);
+console.log("DB_PASSWORD:", process.env.DB_PASSWORD ? "[SET]" : "[NOT SET]");
+console.log("DB_NAME:", process.env.DB_NAME);
+console.log("DB_PORT:", process.env.DB_PORT);
+console.log("Referencia MySQL.MYSQLHOST (raw):", process.env['MySQL.MYSQLHOST']);
+console.log("Variavel Railway MYSQLHOST (direct):", process.env.MYSQLHOST);
+console.log("--- FIM VARIAVEIS DE AMBIENTE (db-mysql.ts) ---");
+console.log("Todas as env vars (inicio do db-mysql.ts):", JSON.stringify(process.env, null, 2));
+
+
 import mysql from 'mysql2/promise';
 
 let pool: mysql.Pool | null = null;
@@ -13,6 +25,12 @@ export function getDbPool(): mysql.Pool {
     if (missingEnvVars.length > 0) {
         const errorMessage = `MySQL: CRITICAL ERROR - As seguintes variáveis de ambiente do banco de dados estão faltando: ${missingEnvVars.join(', ')}`;
         console.error(errorMessage);
+        console.error("Valores atuais no getDbPool:");
+        console.error("DB_HOST:", process.env.DB_HOST);
+        console.error("DB_USER:", process.env.DB_USER);
+        console.error("DB_PASSWORD:", process.env.DB_PASSWORD ? "[SET]" : "[NOT SET]");
+        console.error("DB_NAME:", process.env.DB_NAME);
+        console.error("DB_PORT:", process.env.DB_PORT);
         throw new Error(errorMessage);
     }
 
