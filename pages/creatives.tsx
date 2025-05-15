@@ -1,4 +1,4 @@
-// pages/creatives.tsx
+// pages/Creatives.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import { useAuth } from '@/context/AuthContext';
@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MultiSelectPopover } from "@/components/ui/multi-select-popover"; // Assuming this path is correct
+import { MultiSelectPopover } from "@/components/ui/multi-select-popover";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, PlusCircle, Image as ImageIcon, Video, Type, Filter, Search, Calendar as CalendarIcon, Edit, Trash2, GripVertical, List, Grid, ExternalLink, Clock, HelpCircle, Copy as CopyIcon, Save, FileText, Upload, Paperclip, AlertCircle } from 'lucide-react';
@@ -70,7 +70,7 @@ export default function CreativesPage() {
    const primaryButtonStyle = `bg-gradient-to-r from-[${neonColor}] to-[#4682B4] hover:from-[#4682B4] hover:to-[${neonColor}] text-white font-semibold shadow-[0_4px_10px_rgba(30,144,255,0.4)]`;
    const labelStyle = "text-xs text-gray-300";
    const titleStyle = "text-base font-semibold text-white";
-   const popoverContentStyle=`bg-[#1e2128] border-[#1E90FF]/30 text-white`; // This might not be used directly anymore
+   const popoverContentStyle=`bg-[#1e2128] border-[#1E90FF]/30 text-white`;
    const statusColors: { [key: string]: string } = { draft: 'bg-gray-600/80 border-gray-500/50', active: `bg-green-600/80 border-green-500/50 text-green-100 shadow-[0_0_5px_#32CD32]`, archived: 'bg-slate-700/80 border-slate-600/50 text-slate-300', };
    const getStatusBadgeClass = (status?: string) => cn("absolute top-1 left-1 text-[9px] border px-1.5 py-0 h-4 inline-flex items-center rounded-full shadow-sm leading-none", statusColors[status || 'draft'] || statusColors['draft']);
    const neumorphicTextAreaStyle = cn(neumorphicInputStyle, "min-h-[80px] py-2");
@@ -335,10 +335,27 @@ export default function CreativesPage() {
    };
 
    const getCreativePreview = (creative: Creative) => {
-     const baseStyle = "w-full h-full object-contain bg-gray-900/50";
-     const textStyle = "w-full h-full p-2 text-[10px] overflow-hidden text-ellipsis bg-gray-800/50 text-gray-300 flex items-center justify-center text-center";
-     const iconContainerStyle = cn(baseStyle, "flex items-center justify-center", viewMode === 'list' ? '!h-16 !w-16 !rounded-md' : '!rounded-t-md');
-     const mediaStyle = cn(baseStyle, viewMode === 'list' ? '!h-16 !w-16 !rounded-md' : '!rounded-t-md');
+    const baseMediaStyle = "w-full h-full object-contain"; 
+
+    const mediaStyle = cn(
+      baseMediaStyle,
+      viewMode === 'list'
+        ? '!h-16 !w-16 !rounded-md bg-gray-900/50' 
+        : 'bg-transparent' 
+    );
+
+    const iconContainerStyle = cn(
+      "w-full h-full flex items-center justify-center", 
+      viewMode === 'list'
+        ? '!h-16 !w-16 !rounded-md bg-gray-900/50'
+        : 'bg-transparent text-gray-400'
+    );
+    
+    const textContentStyle = "w-full h-full p-2 text-[10px] overflow-hidden text-ellipsis bg-gray-800/50 text-gray-300 flex items-center justify-center text-center";
+    const gridTextStyle = cn(textContentStyle, viewMode === 'grid' ? 'rounded-t-md' : '');
+    const listTextStyle = cn(textContentStyle, '!h-16 !w-16 !rounded-md');
+
+
      const contentString = (typeof creative.content === 'string' ? creative.content : '').trim();
 
      try {
@@ -369,10 +386,10 @@ export default function CreativesPage() {
          const thumbSrc = src.replace(/\.[^/.]+$/, "-thumb.jpg");
          return <img key={`${creative.id}-thumb-preview`} src={thumbSrc} alt={`${creative.name} (thumbnail)`} className={mediaStyle} loading="lazy" onError={(e) => {
            const target = e.currentTarget;
-           target.onerror = null;
+           target.onerror = null; 
            const parent = target.parentElement;
            if (parent) {
-             parent.innerHTML = '';
+             parent.innerHTML = ''; 
              const iconDiv = document.createElement('div');
              iconDiv.className = iconContainerStyle;
              iconDiv.title = creative.originalFilename || creative.name;
@@ -382,14 +399,14 @@ export default function CreativesPage() {
          }} />;
        }
 
-       if (creative.type === 'video' && isValidSrc && !isLocalFile) {
+       if (creative.type === 'video' && isValidSrc && !isLocalFile) { // Video de URL externa
          return <div className={iconContainerStyle} title={creative.name}><Video className="h-6 w-6 text-gray-400"/></div>;
        }
 
        if (['headline', 'body', 'cta'].includes(creative.type) && isValidSrc) {
-         return <div className={cn(textStyle, viewMode === 'list' ? '!h-16 !w-16 !rounded-md' : '!rounded-t-md')} title={contentString}>{contentString}</div>;
+         return <div className={viewMode === 'list' ? listTextStyle : gridTextStyle} title={contentString}>{contentString}</div>;
        }
-
+       
        return <div className={iconContainerStyle} title={`Conteúdo ou tipo inválido (${creative.type})`}><FileText className="h-6 w-6 text-gray-500"/></div>;
      } catch (error) {
        return <div className={iconContainerStyle} title="Erro inesperado no preview"><AlertCircle className="h-6 w-6 text-red-600"/></div>;
@@ -502,8 +519,10 @@ export default function CreativesPage() {
                      {creative.status && <div className={getStatusBadgeClass(creative.status)}>{STATUS_OPTIONS.find(s => s.value === creative.status)?.label || 'Rascunho'}</div>}
                     {viewMode === 'grid' ? (
                         <>
-                            <div className="aspect-square max-h-[200px] relative overflow-hidden"> {getCreativePreview(creative)} </div>
-                            <CardContent className="p-3">
+                            <div className="w-full h-[200px] relative overflow-hidden flex justify-center items-center bg-[#101010] rounded-t-md">
+                                {getCreativePreview(creative)}
+                            </div>
+                            <CardContent className="p-3 rounded-b-md">
                                 <h3 className="text-sm font-medium truncate text-white">{creative.name}</h3>
                                 <div className="flex items-center gap-1 mt-1">
                                     {React.createElement( CREATIVE_TYPES.find(t => t.value === creative.type)?.icon || 'span', { className: "h-3 w-3 text-gray-400" } )}
@@ -522,7 +541,7 @@ export default function CreativesPage() {
                         </>
                     ) : (
                     <>
-                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md"> {getCreativePreview(creative)} </div>
+                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md flex justify-center items-center bg-[#101010]"> {getCreativePreview(creative)} </div>
                         <div className="ml-3 flex-1 min-w-0">
                             <h3 className="text-sm font-medium truncate text-white">{creative.name}</h3>
                             <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
@@ -619,7 +638,6 @@ export default function CreativesPage() {
                   onChange={handleMultiSelectChange('platform')}
                   placeholder="Selecione..."
                   className={neumorphicInputStyle}
-                  // contentClassName={popoverContentStyle} // <-- LINHA REMOVIDA
                 />
               </div>
 
