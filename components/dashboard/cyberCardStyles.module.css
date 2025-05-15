@@ -1,0 +1,247 @@
+/* components/dashboard/cyberCardStyles.module.css */
+/* From Uiverse.io by 00Kubi - Adapted for Stat Card */
+.container {
+  position: relative;
+  width: 165px; /* Ajustado para ser um pouco menor */
+  height: 105px; /* Ajustado para ser um pouco mais compacto */
+  transition: 200ms;
+  aspect-ratio: 165 / 105; /* Mantém a proporção ajustada */
+  /* Remover ou ajustar margin se a grid já gerenciar espaçamento */
+  /* margin: auto; */ /* Removido, a grid cuida do espaçamento */
+}
+
+.container:active {
+  width: 160px; /* Ajustado para active state */
+  height: 102px; /* Ajustado para active state */
+}
+
+.card {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-radius: 10px; /* Bordas um pouco menos arredondadas */
+  transition: 700ms;
+  background: linear-gradient(45deg, #1a1a1a, #262626);
+  border: 1px solid rgba(255, 255, 255, 0.05); /* Borda mais fina e sutil */
+  overflow: hidden;
+  box-shadow:
+    0 0 10px rgba(0, 0, 0, 0.5), /* Sombra mais compacta */
+    inset 0 0 10px rgba(0, 0, 0, 0.1); /* Sombra interna mais suave */
+  padding: 0.8rem; /* Padding ajustado */
+  color: rgba(255, 255, 255, 0.7); /* Cor base do texto levemente reduzida */
+  font-family: sans-serif; /* Fonte padrão */
+}
+
+.card-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  /* padding: 0.5rem; */ /* Adicionado padding interno se necessário */
+}
+
+.metric-label {
+  font-size: 0.65rem; /* Fonte menor para o label */
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5); /* Cor do label mais sutil */
+  text-shadow: none; /* Removido text-shadow do label para menos glow */
+  margin-bottom: 0.1rem; /* Espaçamento menor */
+  text-transform: uppercase; /* Opcional: para dar um visual mais cyber */
+}
+
+.metric-value {
+  font-size: 1.6rem; /* Fonte ajustada */
+  font-weight: 700; /* Peso da fonte ligeiramente reduzido */
+  letter-spacing: 0.2px; /* Espaçamento menor */
+  width: 100%;
+  text-align: left;
+  margin-top: auto;
+  /* Ajusta o gradiente e a sombra para menos luminescência */
+  background: linear-gradient(45deg, #00eaff, #0093ff); /* Cores ligeiramente ajustadas para menos verde forte */
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 3px rgba(0, 150, 255, 0.15)); /* Brilho azulado reduzido */
+}
+
+.metric-change {
+   font-size: 0.6rem; /* Fonte menor */
+   margin-top: 0.2rem; /* Espaçamento menor */
+   display: flex;
+   align-items: center;
+   font-weight: 600;
+}
+
+.metric-icon {
+    position: absolute;
+    top: 0.6rem; /* Ajustado */
+    right: 0.6rem; /* Ajustado */
+    width: 1.1rem; /* Reduzido tamanho do ícone */
+    height: 1.1rem; /* Reduzido tamanho do ícone */
+    color: rgba(255, 255, 255, 0.4); /* Cor do ícone mais sutil */
+    /* filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.1)); */ /* Opcional: adicionar um leve brilho */
+}
+
+
+/* Elementos decorativos - ajustar ou manter */
+.card-glare { opacity: 0; transition: opacity 300ms; }
+
+.cyber-lines span {
+  position: absolute;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(92, 103, 255, 0.08), /* Opacidade reduzida */
+    transparent
+  );
+}
+
+.cyber-lines span:nth-child(1) { top: 15%; left: 0; width: 100%; height: 1px; transform: scaleX(0); transform-origin: left; animation: lineGrow 3s linear infinite; }
+.cyber-lines span:nth-child(2) { top: 35%; right: 0; width: 100%; height: 1px; transform: scaleX(0); transform-origin: right; animation: lineGrow 3s linear infinite 1s; }
+.cyber-lines span:nth-child(3) { top: 55%; left: 0; width: 100%; height: 1px; transform: scaleX(0); transform-origin: left; animation: lineGrow 3s linear infinite 2s; }
+.cyber-lines span:nth-child(4) { top: 75%; right: 0; width: 100%; height: 1px; transform: scaleX(0); transform-origin: right; animation: lineGrow 3s linear infinite 1.5s; }
+
+
+.corner-elements span {
+  position: absolute;
+  width: 8px; /* Reduzido */
+  height: 8px; /* Reduzido */
+  border: 1px solid rgba(92, 103, 255, 0.2); /* Borda mais sutil */
+}
+
+.corner-elements span:nth-child(1) { top: 5px; left: 5px; border-right: 0; border-bottom: 0; }
+.corner-elements span:nth-child(2) { top: 5px; right: 5px; border-left: 0; border-bottom: 0; }
+.corner-elements span:nth-child(3) { bottom: 5px; left: 5px; border-right: 0; border-top: 0; }
+.corner-elements span:nth-child(4) { bottom: 5px; right: 5px; border-left: 0; border-top: 0; }
+
+
+.scan-line {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(92, 103, 255, 0.04), /* Opacidade reduzida */
+    transparent
+  );
+  transform: translateY(-100%);
+  animation: scanMove 2s linear infinite;
+}
+
+.glowing-elements, .card-particles {
+    display: none;
+}
+
+
+@keyframes lineGrow {
+  0% { transform: scaleX(0); opacity: 0; }
+  50% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(0); opacity: 0; }
+}
+
+@keyframes scanMove {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.noselect {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.tracker {
+  position: absolute;
+  z-index: 200;
+  width: 100%;
+  height: 100%;
+}
+
+.tracker:hover {
+  cursor: pointer;
+}
+
+.tracker:hover ~ .card .card-glare { opacity: 1; }
+
+.tracker:hover ~ .card .corner-elements span {
+  border-color: rgba(92, 103, 255, 0.4); /* Cor ajustada no hover */
+  box-shadow: 0 0 6px rgba(92, 103, 255, 0.2); /* Sombra ajustada no hover */
+}
+
+.container:hover .card::before {
+  transition: 200ms;
+  content: "";
+  opacity: 40%; /* Opacidade reduzida no hover do container */
+}
+
+.tracker:hover ~ .card {
+  transition: 300ms;
+  filter: brightness(1.03); /* Brilho reduzido no hover do tracker */
+}
+
+
+.canvas {
+  perspective: 500px; /* Perspectiva ainda mais reduzida */
+  inset: 0;
+  z-index: 100;
+  position: absolute;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  gap: 0px 0px;
+}
+
+/* Tracker hover transforms - manter como estão */
+.tr-1:hover ~ .card { transform: rotateX(20deg) rotateY(-10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-2:hover ~ .card { transform: rotateX(20deg) rotateY(-5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-3:hover ~ .card { transform: rotateX(20deg) rotateY(0deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-4:hover ~ .card { transform: rotateX(20deg) rotateY(5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-5:hover ~ .card { transform: rotateX(20deg) rotateY(10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-6:hover ~ .card { transform: rotateX(10deg) rotateY(-10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-7:hover ~ .card { transform: rotateX(10deg) rotateY(-5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-8:hover ~ .card { transform: rotateX(10deg) rotateY(0deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-9:hover ~ .card { transform: rotateX(10deg) rotateY(5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-10:hover ~ .card { transform: rotateX(10deg) rotateY(10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-11:hover ~ .card { transform: rotateX(0deg) rotateY(-10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-12:hover ~ .card { transform: rotateX(0deg) rotateY(-5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-13:hover ~ .card { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-14:hover ~ .card { transform: rotateX(0deg) rotateY(5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-15:hover ~ .card { transform: rotateX(0deg) rotateY(10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-16:hover ~ .card { transform: rotateX(-10deg) rotateY(-10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-17:hover ~ .card { transform: rotateX(-10deg) rotateY(-5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-18:hover ~ .card { transform: rotateX(-10deg) rotateY(0deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-19:hover ~ .card { transform: rotateX(-10deg) rotateY(5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-20:hover ~ .card { transform: rotateX(-10deg) rotateY(10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-21:hover ~ .card { transform: rotateX(-20deg) rotateY(-10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-22:hover ~ .card { transform: rotateX(-20deg) rotateY(-5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-23:hover ~ .card { transform: rotateX(-20deg) rotateY(0deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-24:hover ~ .card { transform: rotateX(-20deg) rotateY(5deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+.tr-25:hover ~ .card { transform: rotateX(-20deg) rotateY(10deg) rotateZ(0deg); transition: 125ms ease-in-out; }
+
+.card::before {
+  content: "";
+  background: radial-gradient(
+    circle at center,
+    rgba(0, 255, 170, 0.05) 0%, /* Opacidade reduzida */
+    rgba(0, 162, 255, 0.02) 50%, /* Opacidade reduzida */
+    transparent 100%
+  );
+  filter: blur(10px); /* Blur reduzido */
+  opacity: 0;
+  width: 150%;
+  height: 150%;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.3s ease;
+}
+
+.tracker:hover ~ .card::before { opacity: 0.3; } /* Opacidade reduzida no hover do tracker */
