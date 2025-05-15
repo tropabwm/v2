@@ -21,7 +21,7 @@ const BuilderStudio = () => {
   useEffect(() => {
     createStudioEditor({
       root: "#studio-editor",
-      licenseKey: "2304a1c3f869406c8299aaa42dee959ef1e81708c8ec42b1af19ee167389d3c1",
+      licenseKey: "e13fc60e9e0546f7a0c27dbf4f0824b5c5bc6e9aabab4985bdc0314bcb426418",
       theme: "dark",
       project: { type: "web" },
       storage: {
