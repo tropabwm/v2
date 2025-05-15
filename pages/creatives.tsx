@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MultiSelectPopover } from "@/components/ui/multi-select-popover";
+import { MultiSelectPopover } from "@/components/ui/multi-select-popover"; 
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, PlusCircle, Image as ImageIcon, Video, Type, Filter, Search, Calendar as CalendarIcon, Edit, Trash2, GripVertical, List, Grid, ExternalLink, Clock, HelpCircle, Copy as CopyIcon, Save, FileText, Upload, Paperclip, AlertCircle } from 'lucide-react';
@@ -24,14 +24,14 @@ import axios from 'axios';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
-import path from 'path'; // Import path para getCreativePreview
+import path from 'path'; 
 
 const ReactPlayer = dynamic(() => import('react-player/lazy'), { ssr: false });
 
 type CampaignOption = { id: string; name: string; };
-type CreativeType = 'image' | 'video' | 'headline' | 'body' | 'cta'; // Removido 'text', 'carousel', 'other' para simplificar se não usados
+type CreativeType = 'image' | 'video' | 'headline' | 'body' | 'cta';
 type CreativeStatus = 'draft' | 'active' | 'archived';
-interface Creative { id: string; name: string; campaign_id?: string | null; campaignName?: string; type: CreativeType; content: string; comments?: string | null; status?: CreativeStatus; platform?: string[] | string; format?: string; publish_date?: string | null; created_at?: string; updated_at?: string; originalFilename?: string; thumbnailUrl?: string | null; } // Adicionado thumbnailUrl
+interface Creative { id: string; name: string; campaign_id?: string | null; campaignName?: string; type: CreativeType; content: string; comments?: string | null; status?: CreativeStatus; platform?: string[] | string; format?: string; publish_date?: string | null; created_at?: string; updated_at?: string; originalFilename?: string; thumbnailUrl?: string | null; }
 const CREATIVE_TYPES: { value: CreativeType; label: string; icon: React.ElementType }[] = [ { value: 'image', label: 'Imagem', icon: ImageIcon }, { value: 'video', label: 'Vídeo', icon: Video }, { value: 'headline', label: 'Título', icon: Type }, { value: 'body', label: 'Corpo', icon: Type }, { value: 'cta', label: 'CTA', icon: Type }, ];
 const PLATFORM_OPTIONS = [ { value: "meta", label: "Meta (FB/IG)" }, { value: "google", label: "Google" }, { value: "tiktok", label: "TikTok" }, { value: "linkedin", label: "LinkedIn" }, { value: "other", label: "Outra" }, ];
 const STATUS_OPTIONS: { value: CreativeStatus; label: string }[] = [ { value: 'draft', label: 'Rascunho'}, { value: 'active', label: 'Ativo'}, { value: 'archived', label: 'Arquivado'} ];
@@ -90,6 +90,7 @@ export default function CreativesPage() {
          platform: safeJsonParse(c.platform),
          content: typeof c.content === 'string' ? c.content : '',
          comments: c.comments ?? null,
+         thumbnailUrl: c.thumbnailUrl ?? null,
        })));
      } catch (error: any) {
        toast({ title: "Erro", description: "Falha ao carregar dados iniciais.", variant: "destructive" });
@@ -103,7 +104,7 @@ export default function CreativesPage() {
      if (!authLoading && !isAuthenticated) {
        router.push('/login');
      }
-     if (!authLoading && isAuthenticated && isLoading) { // Alterado para isLoading
+     if (!authLoading && isAuthenticated && isLoading) {
        loadInitialData();
      }
    }, [authLoading, isAuthenticated, router, isLoading, loadInitialData]);
@@ -164,7 +165,7 @@ export default function CreativesPage() {
        if (!formData.name) {
          setFormData(prev => ({ ...prev, name: file.name.replace(/\.[^/.]+$/, "") }));
        }
-       setFormData(prev => ({ ...prev, content: '', thumbnailUrl: null })); // Limpa content e thumbnailUrl ao selecionar novo arquivo
+       setFormData(prev => ({ ...prev, content: '', thumbnailUrl: null }));
      } else {
        setFileToUpload(null);
      }
@@ -203,9 +204,8 @@ export default function CreativesPage() {
        return;
      }
      const isMedia = ['image', 'video'].includes(formData.type);
-     const hasContentUrl = formData.content?.trim()?.startsWith('http'); // Se é uma URL externa
+     const hasContentUrl = formData.content?.trim()?.startsWith('http');
      const hasExistingLocalContent = formData.content?.trim()?.startsWith('/uploads/');
-
 
      if (isMedia && !fileToUpload && !hasContentUrl && !hasExistingLocalContent) {
        toast({ title: "Erro", description: "Arquivo ou URL é obrigatório para Imagem/Vídeo.", variant: "destructive" });
@@ -220,7 +220,6 @@ export default function CreativesPage() {
      let finalContent = formData.content || '';
      let finalOriginalFilename = selectedCreative?.originalFilename || formData.originalFilename;
      let finalThumbnailUrl = selectedCreative?.thumbnailUrl || formData.thumbnailUrl;
-
 
      try {
        if (isMedia && fileToUpload) {
@@ -239,7 +238,7 @@ export default function CreativesPage() {
 
          finalContent = uploadResponse.data.filePath;
          finalOriginalFilename = uploadResponse.data.originalName;
-         finalThumbnailUrl = uploadResponse.data.thumbnailUrl || null; // Captura a thumbnailUrl
+         finalThumbnailUrl = uploadResponse.data.thumbnailUrl || null;
        }
 
        const dataToSave: Partial<Omit<Creative, 'id' | 'created_at' | 'updated_at' | 'campaignName'>> & {thumbnailUrl?: string | null} = {
@@ -249,11 +248,9 @@ export default function CreativesPage() {
          platform: Array.isArray(formData.platform) ? JSON.stringify(formData.platform) : null,
          publish_date: formData.publish_date ? new Date(formData.publish_date).toISOString().split('.')[0]+"Z" : null,
          comments: formData.comments?.trim() === '' ? null : formData.comments,
-         thumbnailUrl: finalThumbnailUrl, // Salva a thumbnailUrl
+         thumbnailUrl: finalThumbnailUrl,
        };
-       // Remover thumbnailUrl se for null para não enviar ao backend se não existir
        if (dataToSave.thumbnailUrl === null) delete dataToSave.thumbnailUrl;
-
 
        let response;
        let savedCreative: Creative;
@@ -266,12 +263,10 @@ export default function CreativesPage() {
          savedCreative = response.data;
        }
        
-       // Sempre normalizar após salvar/atualizar
         savedCreative.platform = safeJsonParse(savedCreative.platform);
         savedCreative.content = typeof savedCreative.content === 'string' ? savedCreative.content : '';
         savedCreative.comments = savedCreative.comments ?? null;
         savedCreative.thumbnailUrl = savedCreative.thumbnailUrl ?? null;
-
 
        if (selectedCreative) {
          setCreatives(prev => prev.map(c => c.id === selectedCreative.id ? savedCreative : c));
@@ -293,37 +288,40 @@ export default function CreativesPage() {
    const openCreativeDetail = (creative: Creative) => { /* ... (como antes) ... */ };
    const closeCreativeDetail = () => { /* ... (como antes) ... */ };
    const handleSaveComment = async () => { /* ... (como antes) ... */ };
-   const getVideoUrl = (content: string) => { /* ... (como antes) ... */ };
-
+   
+   const getVideoUrl = (content: string | undefined | null): string => {
+    if (content && content.startsWith('/uploads/')) {
+      return `/api/file${content}`;
+    }
+    return content || ''; // Retorna string vazia se content for null/undefined
+  };
 
     const getCreativePreview = (creative: Creative) => {
         const basePreviewContainerStyle = cn(
-            "bg-gray-900/50 flex items-center justify-center overflow-hidden relative group", // Adicionado relative group
-            viewMode === 'list' ? 'h-16 w-16 rounded-md shrink-0' : 'aspect-[4/3] w-full rounded-t-md' // aspect-[4/3] para grid
+            "bg-gray-900/50 flex items-center justify-center overflow-hidden relative group",
+            viewMode === 'list' ? 'h-16 w-16 rounded-md shrink-0' : 'aspect-[4/3] w-full rounded-t-md'
         );
         const mediaStyle = "w-full h-full object-contain transition-transform duration-300 group-hover:scale-105";
         const textStyle = "w-full h-full p-1 text-[10px] overflow-hidden text-ellipsis text-gray-300 flex items-center justify-center text-center";
-        const iconStyle = "h-8 w-8 text-gray-500"; // Tamanho maior para ícones de fallback
+        const iconStyle = "h-8 w-8 text-gray-500";
 
         const contentString = (typeof creative.content === 'string' ? creative.content : '').trim();
-        const thumbnailUrl = creative.thumbnailUrl; // Usar a thumbnailUrl do criativo
+        const thumbnailUrl = creative.thumbnailUrl;
         let src = '/placeholder.png';
         let isLocalFile = false;
 
         if (creative.type === 'video' && thumbnailUrl && thumbnailUrl.startsWith('/uploads/')) {
-            src = `/api/file${thumbnailUrl}`; // Caminho para a thumbnail gerada
-            isLocalFile = true; // Considerar thumbnail local
+            src = `/api/file${thumbnailUrl}`;
+            isLocalFile = true; 
         } else if (contentString.startsWith('/uploads/')) {
             src = `/api/file${contentString}`;
             isLocalFile = true;
         } else if (contentString.startsWith('http')) {
             src = contentString;
         } else if (['headline', 'body', 'cta'].includes(creative.type)){
-            // Não precisa de src, o contentString é o preview
+            // No src needed
         }
         
-        const hasValidMediaSrc = src !== '/placeholder.png' || (creative.type === 'video' && thumbnailUrl);
-
         if (!contentString && !thumbnailUrl && ['image', 'video'].includes(creative.type)) {
             return <div className={basePreviewContainerStyle} title={`Conteúdo ausente (${creative.type})`}><AlertCircle className={iconStyle}/></div>;
         }
@@ -341,8 +339,7 @@ export default function CreativesPage() {
             }
 
             if (creative.type === 'video') {
-                 // Prioriza a thumbnail customizada se existir
-                if (thumbnailUrl) {
+                if (thumbnailUrl) { // Prioriza a thumbnail da API de upload
                      const thumbSrc = thumbnailUrl.startsWith('/uploads/') ? `/api/file${thumbnailUrl}` : thumbnailUrl;
                      return (
                         <div className={basePreviewContainerStyle}>
@@ -350,7 +347,7 @@ export default function CreativesPage() {
                                 onError={(e) => {
                                     const target = e.currentTarget; target.onerror = null;
                                     const iconContainer = document.createElement('div');
-                                    iconContainer.className = `${basePreviewContainerStyle} /*object-cover*/`; // Garante que o container ocupe espaço
+                                    iconContainer.className = `${basePreviewContainerStyle}`; 
                                     iconContainer.title = creative.originalFilename || creative.name;
                                     iconContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${iconStyle} text-gray-400"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>`;
                                     if(target.parentElement) target.replaceWith(iconContainer);
@@ -358,9 +355,9 @@ export default function CreativesPage() {
                             />
                         </div>
                     );
-                } else if (contentString.startsWith('http')) { // Video de URL externa sem thumbnail customizada
+                } else if (contentString.startsWith('http')) { 
                      return <div className={basePreviewContainerStyle} title={creative.name}><Video className={cn(iconStyle, "text-gray-400")}/></div>;
-                } else { // Video local sem thumbnail (deveria ter sido gerada)
+                } else { 
                      return <div className={basePreviewContainerStyle} title={`Thumbnail pendente ou falhou (${creative.name})`}><Video className={cn(iconStyle, "text-yellow-500")}/></div>;
                 }
             }
@@ -378,7 +375,7 @@ export default function CreativesPage() {
     };
 
 
-  if (authLoading || (isLoading && creatives.length === 0)) { // Modificado para mostrar loading se estiver carregando e não houver criativos ainda
+  if (authLoading || (isLoading && creatives.length === 0)) {
     return (
       <Layout>
         <div className="flex h-[calc(100vh-100px)] w-full items-center justify-center">
@@ -397,15 +394,15 @@ export default function CreativesPage() {
     <Layout>
       <Head><title>Criativos - USBMKT</title></Head>
       <TooltipProvider delayDuration={0}>
-        <div className="space-y-4 p-4 md:p-6 h-full flex flex-col"> {/* Adicionado h-full flex flex-col */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4 flex-shrink-0"> {/* flex-shrink-0 */}
+        <div className="space-y-4 p-4 md:p-6 h-full flex flex-col">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4 flex-shrink-0">
             <h1 className="text-2xl font-black text-white" style={{ textShadow: `0 0 8px ${neonColor}` }}>Gerenciador de Criativos</h1>
             <Button className={cn(primaryButtonStyle, "h-9 text-sm")} onClick={() => openForm()}>
               <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Criativo
             </Button>
           </div>
 
-          <Card className={cn(cardStyle, "p-3 flex-shrink-0")}> {/* flex-shrink-0 */}
+          <Card className={cn(cardStyle, "p-3 flex-shrink-0")}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
               <div>
                 <Label htmlFor="filterCampaign" className={cn(labelStyle, "mb-1")}>Campanha</Label>
@@ -440,8 +437,8 @@ export default function CreativesPage() {
             </div>
           </Card>
 
-        <div className="flex-grow overflow-y-auto custom-scrollbar pr-1"> {/* Área de scroll para os cards */}
-          {isLoading && filteredCreatives.length === 0 ? ( // Mostrar loading apenas se não houver nada filtrado ainda
+        <div className="flex-grow overflow-y-auto custom-scrollbar pr-1">
+          {isLoading && filteredCreatives.length === 0 ? (
             <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" style={{color: neonColor}} /></div>
           ) : filteredCreatives.length === 0 ? (
             <Card className={cn(cardStyle, "p-10 text-center mt-4")}><p className="text-gray-500">Nenhum criativo encontrado com os critérios atuais.</p></Card>
@@ -460,7 +457,7 @@ export default function CreativesPage() {
                     key={creative.id} 
                     className={cn( 
                       cardStyle, 
-                      viewMode === 'list' ? "flex flex-row items-center p-2 hover:bg-slate-800/30" : "flex flex-col overflow-hidden group", // Adicionado group para hover no preview
+                      viewMode === 'list' ? "flex flex-row items-center p-2 hover:bg-slate-800/30" : "flex flex-col overflow-hidden group",
                       "transition-all duration-200 hover:shadow-[0_0_12px_rgba(30,144,255,0.5)] cursor-pointer relative" 
                     )} 
                     onClick={() => openCreativeDetail(creative)} 
@@ -469,14 +466,14 @@ export default function CreativesPage() {
                       
                       <div className={cn(
                           viewMode === 'grid' ? 'w-full aspect-[4/3]' : 'h-16 w-16 shrink-0 rounded-md',
-                          "overflow-hidden relative bg-gray-800/30" // Fundo para área de preview
+                          "overflow-hidden relative bg-gray-800/30" 
                       )}>
                           {getCreativePreview(creative)}
                       </div>
 
                       <div className={cn(
                           "flex-1 min-w-0", 
-                          viewMode === 'grid' ? "p-3 flex flex-col justify-between h-[calc(100%-theme(aspectRatio.4/3))]" : "ml-3 py-1" // Ajuste de altura para grid
+                          viewMode === 'grid' ? "p-3 flex flex-col justify-between min-h-[80px]" : "ml-3 py-1" // Adicionado min-h para grid
                       )}>
                           <div>
                             <h3 className="text-sm font-medium truncate text-white" title={creative.name}>{creative.name}</h3>
@@ -512,11 +509,10 @@ export default function CreativesPage() {
               </div>
             </>
           )}
-          </div> {/* Fim da área de scroll */}
+          </div>
         </div>
       </TooltipProvider>
 
-      {/* ... (Dialogs como antes) ... */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className={cn(cardStyle, "max-w-2xl md:max-w-3xl")}>
           <DialogHeader>
@@ -761,8 +757,8 @@ export default function CreativesPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[calc(90vh-200px)]"> {/* Ajustado para ocupar mais espaço se necessário */}
-            <div className="space-y-4 p-1 pr-3"> {/* Adicionado pr-3 para scrollbar não sobrepor */}
+          <ScrollArea className="max-h-[calc(90vh-200px)]">
+            <div className="space-y-4 p-1 pr-3">
               {selectedCreativeDetail?.campaign_id && (
                 <div className="text-sm">
                   <Label className={labelStyle}>Campanha</Label>
@@ -869,7 +865,6 @@ export default function CreativesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* Estilos Globais (Animação + Date Picker) */}
       <style jsx global>{` @keyframes line-draw { to { stroke-dashoffset: 0; } } .animate-line-draw { animation: line-draw 1.5s ease-in-out forwards; } input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6) brightness(100%) sepia(100%) hue-rotate(180deg) saturate(500%); cursor: pointer; opacity: 0.8; transition: opacity 0.2s; } input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; } `}</style>
     </Layout>
   );
