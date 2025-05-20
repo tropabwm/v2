@@ -1,310 +1,310 @@
 //components/CampaignManagerForm.tsx
-importReact,{useState,useEffect}from'react';
-import{Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter,DialogClose}from"@/components/ui/dialog";
-import{Accordion,AccordionContent,AccordionItem,AccordionTrigger}from"@/components/ui/accordion";
-import{Button}from"@/components/ui/button";
-import{Input}from"@/components/ui/input";
-import{Label}from"@/components/ui/label";
-import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from"@/components/ui/select";
-import{Textarea}from"@/components/ui/textarea";
-import{Popover,PopoverContent,PopoverTrigger}from"@/components/ui/popover";
-import{Calendar}from"@/components/ui/calendar";
-import{ScrollArea}from"@/components/ui/scroll-area";
-import{cn}from"@/lib/utils";
-import{CalendarIcon,DollarSign,Info,Zap,Target,Megaphone,Users,Settings2,ClipboardList,Percent,BarChartBig,Briefcase}from'lucide-react';
-import{format,parseISO,isValid}from'date-fns';
-import{ptBR}from'date-fns/locale';
+import React, { useState, useEffect } from 'react'; // CORRIGIDO AQUI
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
+import { CalendarIcon, DollarSign, Info, Zap, Target, Megaphone, Users, Settings2, ClipboardList, Percent, BarChartBig, Briefcase } from 'lucide-react';
+import { format, parseISO, isValid } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-exportinterfaceClientAccountOption{
-id:string;
-name:string;
-platform:'google'|'meta'|string;
-platformAccountId:string;
+export interface ClientAccountOption {
+  id: string;
+  name: string;
+  platform: 'google' | 'meta' | string;
+  platformAccountId: string;
 }
 
-exportinterfaceCampaignFormData{
-id?:string|null;
-name:string;
-status:string;
-selectedClientAccountId?:string|null;
-platform:string[];
-objective:string[];
-ad_format:string[];
-budget?:number|string|null;
-daily_budget?:number|string|null;
-start_date?:Date|null;
-end_date?:Date|null;
-target_audience_description?:string|null;
-industry?:string|null;
-segmentation_notes?:string|null;
-avg_ticket?:number|string|null;
+export interface CampaignFormData {
+  id?: string | null;
+  name: string;
+  status: string;
+  selectedClientAccountId?: string | null;
+  platform: string[];
+  objective: string[];
+  ad_format: string[];
+  budget?: number | string | null;
+  daily_budget?: number | string | null;
+  start_date?: Date | null;
+  end_date?: Date | null;
+  target_audience_description?: string | null;
+  industry?: string | null;
+  segmentation_notes?: string | null;
+  avg_ticket?: number | string | null;
 }
 
-interfaceCampaignManagerFormProps{
-isOpen:boolean;
-onClose:()=>void;
-onSave:(data:Partial<CampaignFormData>)=>Promise<void>;
-campaignData?:Partial<CampaignFormData>|null;
-availableClientAccounts:ClientAccountOption[];
+interface CampaignManagerFormProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (data: Partial<CampaignFormData>) => Promise<void>;
+  campaignData?: Partial<CampaignFormData> | null;
+  availableClientAccounts: ClientAccountOption[];
 }
 
-constinitialFormData:CampaignFormData={
-name:'',
-status:'draft',
-selectedClientAccountId:null,
-platform:[],
-objective:[],
-ad_format:[],
-budget:'',
-daily_budget:'',
-start_date:null,
-end_date:null,
-target_audience_description:'',
-industry:'',
-segmentation_notes:'',
-avg_ticket:'',
+const initialFormData: CampaignFormData = {
+  name: '',
+  status: 'draft',
+  selectedClientAccountId: null,
+  platform: [],
+  objective: [],
+  ad_format: [],
+  budget: '',
+  daily_budget: '',
+  start_date: null,
+  end_date: null,
+  target_audience_description: '',
+  industry: '',
+  segmentation_notes: '',
+  avg_ticket: '',
 };
 
-constcardStyle="bg-[#10121a]/90backdrop-blur-mdborderborder-[#1E90FF]/20shadow-xl";
-constneumorphicInputStyle="bg-[#141414]text-whiteshadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-2px_-2px_4px_rgba(255,255,255,0.05)]placeholder:text-gray-500border-nonefocus:ring-1focus:ring-[#1E90FF]h-9";
-constneumorphicButtonStyle="bg-[#141414]border-nonetext-whiteshadow-[3px_3px_6px_rgba(0,0,0,0.3),-3px_-3px_6px_rgba(255,255,255,0.05)]hover:shadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-2px_-3px_4px_rgba(255,255,255,0.05)]hover:bg-[#1E90FF]/80active:scale-[0.98]";
-constprimaryButtonStyle=`bg-gradient-to-rfrom-[#1E90FF]to-[#4682B4]hover:from-[#4682B4]hover:to-[#4682B4]text-whitefont-semibold`;
-constlabelStyle="text-xstext-gray-300font-mediummb-1block";
-constsectionTitleStyle="text-smfont-semiboldtext-whiteflexitems-centergap-2hover:no-underlinep-3rounded-mdbg-[#141414]/60hover:bg-[#1E90FF]/10transition-all";
-constselectContentStyle="bg-[#1e2128]border-[#1E90FF]/30text-white";
+const cardStyle = "bg-[#10121a]/90 backdrop-blur-md border border-[#1E90FF]/20 shadow-xl";
+const neumorphicInputStyle = "bg-[#141414] text-white shadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-2px_-2px_4px_rgba(255,255,255,0.05)] placeholder:text-gray-500 border-none focus:ring-1 focus:ring-[#1E90FF] h-9";
+const neumorphicButtonStyle = "bg-[#141414] border-none text-white shadow-[3px_3px_6px_rgba(0,0,0,0.3),-3px_-3px_6px_rgba(255,255,255,0.05)] hover:shadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-2px_-3px_4px_rgba(255,255,255,0.05)] hover:bg-[#1E90FF]/80 active:scale-[0.98]";
+const primaryButtonStyle = `bg-gradient-to-r from-[#1E90FF] to-[#4682B4] hover:from-[#4682B4] hover:to-[#4682B4] text-white font-semibold`;
+const labelStyle = "text-xs text-gray-300 font-medium mb-1 block";
+const sectionTitleStyle = "text-sm font-semibold text-white flex items-center gap-2 hover:no-underline p-3 rounded-md bg-[#141414]/60 hover:bg-[#1E90FF]/10 transition-all";
+const selectContentStyle = "bg-[#1e2128] border-[#1E90FF]/30 text-white";
 
-constMOCK_PLATFORMS=[{value:'google',label:'GoogleAds'},{value:'meta',label:'MetaAds'},{value:'tiktok',label:'TikTokAds'}];
-constMOCK_OBJECTIVES=[{value:'vendas',label:'Vendas'},{value:'leads',label:'Leads'},{value:'trafego',label:'Tráfego'}];
-constMOCK_AD_FORMATS=[{value:'imagem',label:'Imagem'},{value:'video',label:'Vídeo'},{value:'carrossel',label:'Carrossel'}];
-constMOCK_STATUSES=[{value:'draft',label:'Rascunho'},{value:'active',label:'Ativa'},{value:'paused',label:'Pausada'},{value:'completed',label:'Concluída'}];
+const MOCK_PLATFORMS = [{ value: 'google', label: 'Google Ads' }, { value: 'meta', label: 'Meta Ads' }, { value: 'tiktok', label: 'TikTok Ads' }];
+const MOCK_OBJECTIVES = [{ value: 'vendas', label: 'Vendas' }, { value: 'leads', label: 'Leads' }, { value: 'trafego', label: 'Tráfego' }];
+const MOCK_AD_FORMATS = [{ value: 'imagem', label: 'Imagem' }, { value: 'video', label: 'Vídeo' }, { value: 'carrossel', label: 'Carrossel' }];
+const MOCK_STATUSES = [{ value: 'draft', label: 'Rascunho' }, { value: 'active', label: 'Ativa' }, { value: 'paused', label: 'Pausada' }, { value: 'completed', label: 'Concluída' }];
 
 
-exportdefaultfunctionCampaignManagerForm({
-isOpen,
-onClose,
-onSave,
-campaignData,
-availableClientAccounts,
-}:CampaignManagerFormProps){
-const[formData,setFormData]=useState<CampaignFormData>(initialFormData);
-const[isLoading,setIsLoading]=useState(false);
+export default function CampaignManagerForm({
+  isOpen,
+  onClose,
+  onSave,
+  campaignData,
+  availableClientAccounts,
+}: CampaignManagerFormProps) {
+  const [formData, setFormData] = useState<CampaignFormData>(initialFormData);
+  const [isLoading, setIsLoading] = useState(false);
 
-useEffect(()=>{
-if(isOpen){
-if(campaignData){
-setFormData({
-id:campaignData.id||null,
-name:campaignData.name||'',
-status:campaignData.status||'draft',
-selectedClientAccountId:campaignData.selectedClientAccountId||null,
-platform:campaignData.platform||[],
-objective:campaignData.objective||[],
-ad_format:campaignData.ad_format||[],
-budget:campaignData.budget||'',
-daily_budget:campaignData.daily_budget||'',
-start_date:campaignData.start_date?(isValid(campaignData.start_date)?campaignData.start_date:(isValid(parseISO(String(campaignData.start_date))?parseISO(String(campaignData.start_date):null)):null,
-end_date:campaignData.end_date?(isValid(campaignData.end_date)?campaignData.end_date:(isValid(parseISO(String(campaignData.end_date))?parseISO(String(campaignData.end_date):null)):null,
-target_audience_description:campaignData.target_audience_description||'',
-industry:campaignData.industry||'',
-segmentation_notes:campaignData.segmentation_notes||'',
-avg_ticket:campaignData.avg_ticket||'',
-});
-}else{
-setFormData(initialFormData);
-}
-}
-},[campaignData,isOpen]);
+  useEffect(() => {
+    if (isOpen) {
+      if (campaignData) {
+        setFormData({
+          id: campaignData.id || null,
+          name: campaignData.name || '',
+          status: campaignData.status || 'draft',
+          selectedClientAccountId: campaignData.selectedClientAccountId || null,
+          platform: campaignData.platform || [],
+          objective: campaignData.objective || [],
+          ad_format: campaignData.ad_format || [],
+          budget: campaignData.budget || '',
+          daily_budget: campaignData.daily_budget || '',
+          start_date: campaignData.start_date ? (isValid(campaignData.start_date) ? campaignData.start_date : (isValid(parseISO(String(campaignData.start_date))) ? parseISO(String(campaignData.start_date)) : null)) : null,
+          end_date: campaignData.end_date ? (isValid(campaignData.end_date) ? campaignData.end_date : (isValid(parseISO(String(campaignData.end_date))) ? parseISO(String(campaignData.end_date)) : null)) : null,
+          target_audience_description: campaignData.target_audience_description || '',
+          industry: campaignData.industry || '',
+          segmentation_notes: campaignData.segmentation_notes || '',
+          avg_ticket: campaignData.avg_ticket || '',
+        });
+      } else {
+        setFormData(initialFormData);
+      }
+    }
+  }, [campaignData, isOpen]);
 
-consthandleChange=(field:keyofCampaignFormData,value:any)=>{
-setFormData(prev=>({...prev,[field]:value});
-};
+  const handleChange = (field: keyof CampaignFormData, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
 
-consthandleMultiSelectChange=(field:'platform'|'objective'|'ad_format',value:string)=>{
-setFormData(prev=>{
-constcurrentValues=prev[field]asstring[]||[];
-constnewValues=currentValues.includes(value)
-?currentValues.filter(v=>v!==value)
-:[...currentValues,value];
-return{...prev,[field]:newValues};
-});
-};
+  const handleMultiSelectChange = (field: 'platform' | 'objective' | 'ad_format', value: string) => {
+    setFormData(prev => {
+      const currentValues = prev[field] as string[] || [];
+      const newValues = currentValues.includes(value)
+        ? currentValues.filter(v => v !== value)
+        : [...currentValues, value];
+      return { ...prev, [field]: newValues };
+    });
+  };
 
-consthandleSubmit=async(e:React.FormEvent)=>{
-e.preventDefault();
-if(!formData.selectedClientAccountId){
-alert("Porfavor,selecioneumaContadeClienteVinculada.");
-return;
-}
-setIsLoading(true);
-constdataToSave={
-...formData,
-budget:formData.budget?parseFloat(String(formData.budget)):null,
-daily_budget:formData.daily_budget?parseFloat(String(formData.daily_budget)):null,
-avg_ticket:formData.avg_ticket?parseFloat(String(formData.avg_ticket)):null,
-};
-awaitonSave(dataToSave);
-setIsLoading(false);
-};
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.selectedClientAccountId) {
+      alert("Por favor, selecione uma Conta de Cliente Vinculada.");
+      return;
+    }
+    setIsLoading(true);
+    const dataToSave = {
+      ...formData,
+      budget: formData.budget ? parseFloat(String(formData.budget)) : null,
+      daily_budget: formData.daily_budget ? parseFloat(String(formData.daily_budget)) : null,
+      avg_ticket: formData.avg_ticket ? parseFloat(String(formData.avg_ticket)) : null,
+    };
+    await onSave(dataToSave);
+    setIsLoading(false);
+  };
 
-constrenderMultiSelectButtons=(
-options:{value:string;label:string}[],
-field:'platform'|'objective'|'ad_format'
-)=>(
-<divclassName="flexflex-wrapgap-2mt-1.5">
-{options.map(opt=>(
-<Button
-key={opt.value}
-type="button"
-variant={(formData[field]asstring[]).includes(opt.value)?"default":"outline"}
-onClick={()=>handleMultiSelectChange(field,opt.value)}
-className={cn(
-neumorphicButtonStyle,"text-xsh-8px-3",
-(formData[field]asstring[]).includes(opt.value)?primaryButtonStyle:"bg-[#0e1015]hover:bg-[#1E90FF]/20"
-)}
->
-{opt.label}
-</Button>
-))}
-</div>
-);
+  const renderMultiSelectButtons = (
+    options: { value: string; label: string }[],
+    field: 'platform' | 'objective' | 'ad_format'
+  ) => (
+    <div className="flex flex-wrap gap-2 mt-1.5">
+      {options.map(opt => (
+        <Button
+          key={opt.value}
+          type="button"
+          variant={(formData[field] as string[]).includes(opt.value) ? "default" : "outline"}
+          onClick={() => handleMultiSelectChange(field, opt.value)}
+          className={cn(
+            neumorphicButtonStyle, "text-xs h-8 px-3",
+            (formData[field] as string[]).includes(opt.value) ? primaryButtonStyle : "bg-[#0e1015] hover:bg-[#1E90FF]/20"
+          )}
+        >
+          {opt.label}
+        </Button>
+      ))}
+    </div>
+  );
 
-return(
-<Dialogopen={isOpen}onOpenChange={(open)=>!open&&onClose()}>
-<DialogContentclassName={cn(cardStyle,"max-w-3xlmd:max-w-4xlp-0border-none")}>
-<DialogHeaderclassName="p-4border-bborder-[#1E90FF]/20">
-<DialogTitleclassName="text-lgfont-semiboldtext-white">
-{campaignData?.id?'EditarCampanhadeTráfego':'NovaCampanhadeTráfego'}
-</DialogTitle>
-<DialogDescriptionclassName="text-smtext-gray-400">
-Preenchaosdetalhespara{campaignData?.id?'atualizara':'criarumanova'}campanha.
-</DialogDescription>
-</DialogHeader>
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className={cn(cardStyle, "max-w-3xl md:max-w-4xl p-0 border-none")}>
+        <DialogHeader className="p-4 border-b border-[#1E90FF]/20">
+          <DialogTitle className="text-lg font-semibold text-white">
+            {campaignData?.id ? 'Editar Campanha de Tráfego' : 'Nova Campanha de Tráfego'}
+          </DialogTitle>
+          <DialogDescription className="text-sm text-gray-400">
+            Preencha os detalhes para {campaignData?.id ? 'atualizar a' : 'criar uma nova'} campanha.
+          </DialogDescription>
+        </DialogHeader>
 
-<formonSubmit={handleSubmit}>
-<ScrollAreaclassName="max-h-[calc(85vh-120px)">
-<divclassName="p-4space-y-1">
-<Accordiontype="multiple"defaultValue={["infoPrincipais","plataformaOrcamento"]}>
+        <form onSubmit={handleSubmit}>
+          <ScrollArea className="max-h-[calc(85vh-120px)]">
+            <div className="p-4 space-y-1">
+              <Accordion type="multiple" defaultValue={["infoPrincipais", "plataformaOrcamento"]}>
 
-<AccordionItemvalue="infoPrincipais"className="border-nonemb-2">
-<AccordionTriggerclassName={sectionTitleStyle}><BriefcaseclassName="h-4w-4mr-2text-[#1E90FF]"/>Vinculação&InformaçõesGerais</AccordionTrigger>
-<AccordionContentclassName="pt-2px-0.5pb-0.5">
-<divclassName="p-4gridgrid-cols-1md:grid-cols-2gap-x-4gap-y-3bg-[#0A0B0F]/30rounded-mdborderborder-transparenthover:border-[#1E90FF]/20transition-colors">
-<div>
-<LabelhtmlFor="clientAccount"className={labelStyle}>ContadeClienteVinculada*</Label>
-<Selectvalue={formData.selectedClientAccountId||''}onValueChange={(value)=>handleChange('selectedClientAccountId',value)}required>
-<SelectTriggerid="clientAccount"className={neumorphicInputStyle}><SelectValueplaceholder="Selecioneaconta..."/></SelectTrigger>
-<SelectContentclassName={selectContentStyle}>
-{availableClientAccounts.length===0&&<SelectItemvalue=""disabled>Nenhumacontaconectada</SelectItem>}
-{availableClientAccounts.map(acc=>(<SelectItemkey={acc.id}value={acc.id}>{acc.name}({acc.platform.toUpperCase()})</SelectItem>))}
-</SelectContent>
-</Select>
-</div>
-<div>
-<LabelhtmlFor="name"className={labelStyle}>NomedaCampanha*</Label>
-<Inputid="name"value={formData.name}onChange={(e)=>handleChange('name',e.target.value)}placeholder="Ex:LançamentoBlackFriday-ClienteX"className={neumorphicInputStyle}required/>
-</div>
-<div>
-<LabelhtmlFor="status"className={labelStyle}>Status*</Label>
-<Selectvalue={formData.status}onValueChange={(value)=>handleChange('status',value)}required>
-<SelectTriggerid="status"className={neumorphicInputStyle}><SelectValueplaceholder="Selecione..."/></SelectTrigger>
-<SelectContentclassName={selectContentStyle}>{MOCK_STATUSES.map(opt=>(<SelectItemkey={opt.value}value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
-</Select>
-</div>
-<div>
-<LabelhtmlFor="industry"className={labelStyle}>Indústria/Nicho</Label>
-<Inputid="industry"value={formData.industry||''}onChange={(e)=>handleChange('industry',e.target.value)}placeholder="Ex:E-commercedeModa"className={neumorphicInputStyle}/>
-</div>
-</div>
-</AccordionContent>
-</AccordionItem>
+                <AccordionItem value="infoPrincipais" className="border-none mb-2">
+                  <AccordionTrigger className={sectionTitleStyle}><Briefcase className="h-4 w-4 mr-2 text-[#1E90FF]" />Vinculação & Informações Gerais</AccordionTrigger>
+                  <AccordionContent className="pt-2 px-0.5 pb-0.5">
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 bg-[#0A0B0F]/30 rounded-md border border-transparent hover:border-[#1E90FF]/20 transition-colors">
+                      <div>
+                        <Label htmlFor="clientAccount" className={labelStyle}>Conta de Cliente Vinculada*</Label>
+                        <Select value={formData.selectedClientAccountId || ''} onValueChange={(value) => handleChange('selectedClientAccountId', value)} required>
+                          <SelectTrigger id="clientAccount" className={neumorphicInputStyle}><SelectValue placeholder="Selecione a conta..." /></SelectTrigger>
+                          <SelectContent className={selectContentStyle}>
+                            {availableClientAccounts.length === 0 && <SelectItem value="" disabled>Nenhuma conta conectada</SelectItem>}
+                            {availableClientAccounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.platform.toUpperCase()})</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="name" className={labelStyle}>Nome da Campanha*</Label>
+                        <Input id="name" value={formData.name} onChange={(e) => handleChange('name', e.target.value)} placeholder="Ex: Lançamento Black Friday - Cliente X" className={neumorphicInputStyle} required />
+                      </div>
+                      <div>
+                        <Label htmlFor="status" className={labelStyle}>Status*</Label>
+                        <Select value={formData.status} onValueChange={(value) => handleChange('status', value)} required>
+                          <SelectTrigger id="status" className={neumorphicInputStyle}><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                          <SelectContent className={selectContentStyle}>{MOCK_STATUSES.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="industry" className={labelStyle}>Indústria/Nicho</Label>
+                        <Input id="industry" value={formData.industry || ''} onChange={(e) => handleChange('industry', e.target.value)} placeholder="Ex: E-commerce de Moda" className={neumorphicInputStyle} />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
 
-<AccordionItemvalue="plataformaOrcamento"className="border-nonemb-2">
-<AccordionTriggerclassName={sectionTitleStyle}><MegaphoneclassName="h-4w-4mr-2text-[#1E90FF]"/>Plataformas,Objetivos&Formatos</AccordionTrigger>
-<AccordionContentclassName="pt-2px-0.5pb-0.5">
-<divclassName="p-4space-y-4bg-[#0A0B0F]/30rounded-mdborderborder-transparenthover:border-[#1E90FF]/20transition-colors">
-<div>
-<LabelclassName={labelStyle}>Plataforma(s)deAnúncio*</Label>
-{renderMultiSelectButtons(MOCK_PLATFORMS,'platform')}
-{formData.platform.length===0&&<pclassName="text-xstext-red-400mt-1">Selecioneaomenosumaplataforma.</p>}
-</div>
-<div>
-<LabelclassName={labelStyle}>Objetivo(s)Principal(is)</Label>
-{renderMultiSelectButtons(MOCK_OBJECTIVES,'objective')}
-</div>
-<div>
-<LabelclassName={labelStyle}>Formato(s)deAnúncio</Label>
-{renderMultiSelectButtons(MOCK_AD_FORMATS,'ad_format')}
-</div>
-</div>
-</AccordionContent>
-</AccordionItem>
+                <AccordionItem value="plataformaOrcamento" className="border-none mb-2">
+                  <AccordionTrigger className={sectionTitleStyle}><Megaphone className="h-4 w-4 mr-2 text-[#1E90FF]" />Plataformas, Objetivos & Formatos</AccordionTrigger>
+                  <AccordionContent className="pt-2 px-0.5 pb-0.5">
+                    <div className="p-4 space-y-4 bg-[#0A0B0F]/30 rounded-md border border-transparent hover:border-[#1E90FF]/20 transition-colors">
+                      <div>
+                        <Label className={labelStyle}>Plataforma(s) de Anúncio*</Label>
+                        {renderMultiSelectButtons(MOCK_PLATFORMS, 'platform')}
+                        {formData.platform.length === 0 && <p className="text-xs text-red-400 mt-1">Selecione ao menos uma plataforma.</p>}
+                      </div>
+                      <div>
+                        <Label className={labelStyle}>Objetivo(s) Principal(is)</Label>
+                        {renderMultiSelectButtons(MOCK_OBJECTIVES, 'objective')}
+                      </div>
+                      <div>
+                        <Label className={labelStyle}>Formato(s) de Anúncio</Label>
+                        {renderMultiSelectButtons(MOCK_AD_FORMATS, 'ad_format')}
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
 
-<AccordionItemvalue="orcamentoDatas"className="border-nonemb-2">
-<AccordionTriggerclassName={sectionTitleStyle}><DollarSignclassName="h-4w-4mr-2text-[#1E90FF]"/>Orçamento&Agendamento</AccordionTrigger>
-<AccordionContentclassName="pt-2px-0.5pb-0.5">
-<divclassName="p-4gridgrid-cols-1md:grid-cols-2gap-x-4gap-y-3bg-[#0A0B0F]/30rounded-mdborderborder-transparenthover:border-[#1E90FF]/20transition-colors">
-<div>
-<LabelhtmlFor="daily_budget"className={labelStyle}>OrçamentoDiário(R$)</Label>
-<Inputid="daily_budget"type="number"step="0.01"value={String(formData.daily_budget||'')}onChange={(e)=>handleChange('daily_budget',e.target.value)}placeholder="Ex:50.00"className={neumorphicInputStyle}/>
-</div>
-<div>
-<LabelhtmlFor="budget"className={labelStyle}>OrçamentoTotal(R$)(Opcional)</Label>
-<Inputid="budget"type="number"step="0.01"value={String(formData.budget||'')}onChange={(e)=>handleChange('budget',e.target.value)}placeholder="Ex:1500.00"className={neumorphicInputStyle}/>
-</div>
-<div>
-<LabelhtmlFor="start_date"className={labelStyle}>DatadeInício</Label>
-<Popover><PopoverTriggerasChild><Buttonvariant="outline"className={cn(neumorphicInputStyle,"w-fulljustify-starttext-leftfont-normal",!formData.start_date&&"text-muted-foreground")}><CalendarIconclassName="mr-2h-4w-4"/>{formData.start_date?format(formData.start_date,'dd/MM/yyyy',{locale:ptBR}):<span>Selecione...</span>}</Button></PopoverTrigger><PopoverContentclassName={cn(selectContentStyle,"w-autop-0")}><Calendarmode="single"selected={formData.start_date||undefined}onSelect={(date)=>handleChange('start_date',date||null)}initialFocuslocale={ptBR}/></PopoverContent></Popover>
-</div>
-<div>
-<LabelhtmlFor="end_date"className={labelStyle}>DatadeTérmino(Opcional)</Label>
-<Popover><PopoverTriggerasChild><Buttonvariant="outline"className={cn(neumorphicInputStyle,"w-fulljustify-starttext-leftfont-normal",!formData.end_date&&"text-muted-foreground")}><CalendarIconclassName="mr-2h-4w-4"/>{formData.end_date?format(formData.end_date,'dd/MM/yyyy',{locale:ptBR}):<span>Selecione...</span>}</Button></PopoverTrigger><PopoverContentclassName={cn(selectContentStyle,"w-autop-0")}><Calendarmode="single"selected={formData.end_date||undefined}onSelect={(date)=>handleChange('end_date',date||null)}initialFocuslocale={ptBR}/></PopoverContent></Popover>
-</div>
-</div>
-</AccordionContent>
-</AccordionItem>
+                <AccordionItem value="orcamentoDatas" className="border-none mb-2">
+                  <AccordionTrigger className={sectionTitleStyle}><DollarSign className="h-4 w-4 mr-2 text-[#1E90FF]" />Orçamento & Agendamento</AccordionTrigger>
+                  <AccordionContent className="pt-2 px-0.5 pb-0.5">
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 bg-[#0A0B0F]/30 rounded-md border border-transparent hover:border-[#1E90FF]/20 transition-colors">
+                      <div>
+                        <Label htmlFor="daily_budget" className={labelStyle}>Orçamento Diário (R$)</Label>
+                        <Input id="daily_budget" type="number" step="0.01" value={String(formData.daily_budget || '')} onChange={(e) => handleChange('daily_budget', e.target.value)} placeholder="Ex: 50.00" className={neumorphicInputStyle} />
+                      </div>
+                      <div>
+                        <Label htmlFor="budget" className={labelStyle}>Orçamento Total (R$) (Opcional)</Label>
+                        <Input id="budget" type="number" step="0.01" value={String(formData.budget || '')} onChange={(e) => handleChange('budget', e.target.value)} placeholder="Ex: 1500.00" className={neumorphicInputStyle} />
+                      </div>
+                      <div>
+                        <Label htmlFor="start_date" className={labelStyle}>Data de Início</Label>
+                        <Popover><PopoverTrigger asChild><Button variant="outline" className={cn(neumorphicInputStyle, "w-full justify-start text-left font-normal", !formData.start_date && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formData.start_date ? format(formData.start_date, 'dd/MM/yyyy', { locale: ptBR }) : <span>Selecione...</span>}</Button></PopoverTrigger><PopoverContent className={cn(selectContentStyle, "w-auto p-0")}><Calendar mode="single" selected={formData.start_date || undefined} onSelect={(date) => handleChange('start_date', date || null)} initialFocus locale={ptBR} /></PopoverContent></Popover>
+                      </div>
+                      <div>
+                        <Label htmlFor="end_date" className={labelStyle}>Data de Término (Opcional)</Label>
+                        <Popover><PopoverTrigger asChild><Button variant="outline" className={cn(neumorphicInputStyle, "w-full justify-start text-left font-normal", !formData.end_date && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formData.end_date ? format(formData.end_date, 'dd/MM/yyyy', { locale: ptBR }) : <span>Selecione...</span>}</Button></PopoverTrigger><PopoverContent className={cn(selectContentStyle, "w-auto p-0")}><Calendar mode="single" selected={formData.end_date || undefined} onSelect={(date) => handleChange('end_date', date || null)} initialFocus locale={ptBR} /></PopoverContent></Popover>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
 
-<AccordionItemvalue="publicoSegmentacao"className="border-nonemb-2">
-<AccordionTriggerclassName={sectionTitleStyle}><UsersclassName="h-4w-4mr-2text-[#1E90FF]"/>Público&Segmentação</AccordionTrigger>
-<AccordionContentclassName="pt-2px-0.5pb-0.5">
-<divclassName="p-4space-y-3bg-[#0A0B0F]/30rounded-mdborderborder-transparenthover:border-[#1E90FF]/20transition-colors">
-<div>
-<LabelhtmlFor="target_audience_description"className={labelStyle}>DescriçãodoPúblico-Alvo</Label>
-<Textareaid="target_audience_description"value={formData.target_audience_description||''}onChange={(e)=>handleChange('target_audience_description',e.target.value)}placeholder="Descrevaascaracterísticasdemográficas,interesses,comportamentos..."className={cn(neumorphicInputStyle,"min-h-[80px]")}/>
-</div>
-<div>
-<LabelhtmlFor="segmentation_notes"className={labelStyle}>NotasAdicionaisdeSegmentação</Label>
-<Textareaid="segmentation_notes"value={formData.segmentation_notes||''}onChange={(e)=>handleChange('segmentation_notes',e.target.value)}placeholder="Detalhessobregeolocalização,dispositivos,exclusões,etc."className={cn(neumorphicInputStyle,"min-h-[60px]")}/>
-</div>
-</div>
-</AccordionContent>
-</AccordionItem>
+                <AccordionItem value="publicoSegmentacao" className="border-none mb-2">
+                  <AccordionTrigger className={sectionTitleStyle}><Users className="h-4 w-4 mr-2 text-[#1E90FF]" />Público & Segmentação</AccordionTrigger>
+                  <AccordionContent className="pt-2 px-0.5 pb-0.5">
+                    <div className="p-4 space-y-3 bg-[#0A0B0F]/30 rounded-md border border-transparent hover:border-[#1E90FF]/20 transition-colors">
+                      <div>
+                        <Label htmlFor="target_audience_description" className={labelStyle}>Descrição do Público-Alvo</Label>
+                        <Textarea id="target_audience_description" value={formData.target_audience_description || ''} onChange={(e) => handleChange('target_audience_description', e.target.value)} placeholder="Descreva as características demográficas, interesses, comportamentos..." className={cn(neumorphicInputStyle, "min-h-[80px]")} />
+                      </div>
+                      <div>
+                        <Label htmlFor="segmentation_notes" className={labelStyle}>Notas Adicionais de Segmentação</Label>
+                        <Textarea id="segmentation_notes" value={formData.segmentation_notes || ''} onChange={(e) => handleChange('segmentation_notes', e.target.value)} placeholder="Detalhes sobre geolocalização, dispositivos, exclusões, etc." className={cn(neumorphicInputStyle, "min-h-[60px]")} />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
 
-<AccordionItemvalue="metricasNegocio"className="border-none">
-<AccordionTriggerclassName={sectionTitleStyle}><PercentclassName="h-4w-4mr-2text-[#1E90FF]"/>MétricasdeNegócio(Opcional)</AccordionTrigger>
-<AccordionContentclassName="pt-2px-0.5pb-0.5">
-<divclassName="p-4gridgrid-cols-1md:grid-cols-2gap-x-4gap-y-3bg-[#0A0B0F]/30rounded-mdborderborder-transparenthover:border-[#1E90FF]/20transition-colors">
-<div>
-<LabelhtmlFor="avg_ticket"className={labelStyle}>TicketMédioEstimado(R$)</Label>
-<Inputid="avg_ticket"type="number"step="0.01"value={String(formData.avg_ticket||'')}onChange={(e)=>handleChange('avg_ticket',e.target.value)}placeholder="Ex:197.00"className={neumorphicInputStyle}/>
-</div>
-</div>
-</AccordionContent>
-</AccordionItem>
+                <AccordionItem value="metricasNegocio" className="border-none">
+                  <AccordionTrigger className={sectionTitleStyle}><Percent className="h-4 w-4 mr-2 text-[#1E90FF]" />Métricas de Negócio (Opcional)</AccordionTrigger>
+                  <AccordionContent className="pt-2 px-0.5 pb-0.5">
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 bg-[#0A0B0F]/30 rounded-md border border-transparent hover:border-[#1E90FF]/20 transition-colors">
+                      <div>
+                        <Label htmlFor="avg_ticket" className={labelStyle}>Ticket Médio Estimado (R$)</Label>
+                        <Input id="avg_ticket" type="number" step="0.01" value={String(formData.avg_ticket || '')} onChange={(e) => handleChange('avg_ticket', e.target.value)} placeholder="Ex: 197.00" className={neumorphicInputStyle} />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
 
-</Accordion>
-</div>
-</ScrollArea>
+              </Accordion>
+            </div>
+          </ScrollArea>
 
-<DialogFooterclassName="p-4border-tborder-[#1E90FF]/20gap-2flex-wrapjustify-end">
-<DialogCloseasChild>
-<Buttontype="button"variant="outline"className={cn(neumorphicButtonStyle,"h-8px-3text-xs")}disabled={isLoading}>Cancelar</Button>
-</DialogClose>
-<Buttontype="submit"className={cn(primaryButtonStyle,"h-8px-4text-xs")}disabled={isLoading||!formData.selectedClientAccountId||formData.platform.length===0||!formData.name.trim()}>
-{isLoading?'Salvando...':(campaignData?.id?'SalvarAlterações':'CriarCampanha')}
-</Button>
-</DialogFooter>
-</form>
-</DialogContent>
-</Dialog>
-);
+          <DialogFooter className="p-4 border-t border-[#1E90FF]/20 gap-2 flex-wrap justify-end">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" className={cn(neumorphicButtonStyle, "h-8 px-3 text-xs")} disabled={isLoading}>Cancelar</Button>
+            </DialogClose>
+            <Button type="submit" className={cn(primaryButtonStyle, "h-8 px-4 text-xs")} disabled={isLoading || !formData.selectedClientAccountId || formData.platform.length === 0 || !formData.name.trim()}>
+              {isLoading ? 'Salvando...' : (campaignData?.id ? 'Salvar Alterações' : 'Criar Campanha')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
