@@ -1,9 +1,9 @@
 //pages/campaign-manager.tsx
 import { useState, useEffect, useCallback} from 'react';
-importHead from 'next/head';
+importHead from 'next/head'; //Corrigidoaqui
 importLayout from'@/components/layout';
-import { Button} from'@/components/ui/button';
-import {Input } from'@/components/ui/input';
+import {Button} from'@/components/ui/button';
+import {Input }from'@/components/ui/input';
 import {useToast} from'@/components/ui/use-toast';
 import{ cn} from'@/lib/utils';
 import {PlusCircle,ListFilter,Search,Edit,Trash2,ExternalLink} from 'lucide-react';
