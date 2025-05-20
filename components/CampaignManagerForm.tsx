@@ -67,7 +67,7 @@ avg_ticket:'',
 
 constcardStyle="bg-[#10121a]/90backdrop-blur-mdborderborder-[#1E90FF]/20shadow-xl";
 constneumorphicInputStyle="bg-[#141414]text-whiteshadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-2px_-2px_4px_rgba(255,255,255,0.05)]placeholder:text-gray-500border-nonefocus:ring-1focus:ring-[#1E90FF]h-9";
-constneumorphicButtonStyle="bg-[#141414]border-nonetext-whiteshadow-[3px_3px_6px_rgba(0,0,0,0.3),-3px_-3px_6px_rgba(255,25px,255,0.05)]hover:shadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-2px_-2px_4px_rgba(255,255,255,0.05)]hover:bg-[#1E90FF]/80active:scale-[0.98]";
+constneumorphicButtonStyle="bg-[#141414]border-nonetext-whiteshadow-[3px_3px_6px_rgba(0,0,0,0.3),-3px_-3px_6px_rgba(255,255,255,0.05)]hover:shadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-2px_-3px_4px_rgba(255,255,255,0.05)]hover:bg-[#1E90FF]/80active:scale-[0.98]";
 constprimaryButtonStyle=`bg-gradient-to-rfrom-[#1E90FF]to-[#4682B4]hover:from-[#4682B4]hover:to-[#4682B4]text-whitefont-semibold`;
 constlabelStyle="text-xstext-gray-300font-mediummb-1block";
 constsectionTitleStyle="text-smfont-semiboldtext-whiteflexitems-centergap-2hover:no-underlinep-3rounded-mdbg-[#141414]/60hover:bg-[#1E90FF]/10transition-all";
@@ -116,7 +116,7 @@ setFormData(initialFormData);
 },[campaignData,isOpen]);
 
 consthandleChange=(field:keyofCampaignFormData,value:any)=>{
-setFormData(prev=>({...prev,[field]:value}));
+setFormData(prev=>({...prev,[field]:value});
 };
 
 consthandleMultiSelectChange=(field:'platform'|'objective'|'ad_format',value:string)=>{
@@ -181,9 +181,9 @@ Preenchaosdetalhespara{campaignData?.id?'atualizara':'criarumanova'}campanha.
 </DialogHeader>
 
 <formonSubmit={handleSubmit}>
-<ScrollAreaclassName="max-h-[calc(85vh-120px)]">
+<ScrollAreaclassName="max-h-[calc(85vh-120px)">
 <divclassName="p-4space-y-1">
-<Accordiontype="multiple"defaultValue={["infoPrincipais","plataformaOrcamento"]}className="w-full">
+<Accordiontype="multiple"defaultValue={["infoPrincipais","plataformaOrcamento"]}>
 
 <AccordionItemvalue="infoPrincipais"className="border-nonemb-2">
 <AccordionTriggerclassName={sectionTitleStyle}><BriefcaseclassName="h-4w-4mr-2text-[#1E90FF]"/>Vinculação&InformaçõesGerais</AccordionTrigger>
@@ -282,7 +282,7 @@ Preenchaosdetalhespara{campaignData?.id?'atualizara':'criarumanova'}campanha.
 <AccordionItemvalue="metricasNegocio"className="border-none">
 <AccordionTriggerclassName={sectionTitleStyle}><PercentclassName="h-4w-4mr-2text-[#1E90FF]"/>MétricasdeNegócio(Opcional)</AccordionTrigger>
 <AccordionContentclassName="pt-2px-0.5pb-0.5">
-<divclassName="p-4gridgrid-cols-1md:grid-cols-2gap-x-4gap-y-3bg-[#0A0B0F]/30rounded-mdborderborder-transparenthover:border-[#16b6e2]/20transition-colors">
+<divclassName="p-4gridgrid-cols-1md:grid-cols-2gap-x-4gap-y-3bg-[#0A0B0F]/30rounded-mdborderborder-transparenthover:border-[#1E90FF]/20transition-colors">
 <div>
 <LabelhtmlFor="avg_ticket"className={labelStyle}>TicketMédioEstimado(R$)</Label>
 <Inputid="avg_ticket"type="number"step="0.01"value={String(formData.avg_ticket||'')}onChange={(e)=>handleChange('avg_ticket',e.target.value)}placeholder="Ex:197.00"className={neumorphicInputStyle}/>
