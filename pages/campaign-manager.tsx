@@ -1,6 +1,6 @@
 //pages/campaign-manager.tsx
 import { useState, useEffect, useCallback} from 'react';
-import Headfrom 'next/head';
+import Head from 'next/head';
 import Layout from'@/components/layout';
 import {Button} from'@/components/ui/button';
 import {Input }from'@/components/ui/input';
