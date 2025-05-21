@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/components/ui/use-toast';
-import { cn } from '@/lib/utils';
-import { PlusCircle, ListFilter, Search, Edit, Trash2, MoreHorizontal, Loader2 } from 'lucide-react';
+import { cn } from "@/lib/utils";
+import { PlusCircle, ListFilter, Search, Edit, Trash2, MoreHorizontal, Loader2, ChevronUp, ChevronDown } from 'lucide-react'; // Adicionado ChevronUp, ChevronDown
 import CampaignManagerForm, { CampaignFormData, ClientAccountOption } from '@/components/CampaignManagerForm';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/router';
@@ -32,6 +32,17 @@ interface CampaignListItem extends CampaignFormData {
   objectiveText?: string;
 }
 
+// Tipos para a resposta paginada da API
+interface PaginatedApiResponse<T> {
+  data: T[];
+  pagination: {
+    totalItems: number;
+    totalPages: number;
+    currentPage: number;
+    pageSize: number;
+  };
+}
+
 const STATUS_OPTIONS = [
     { value: 'all', label: 'Todos Status' },
     { value: 'draft', label: 'Rascunho' },
@@ -44,7 +55,7 @@ const STATUS_OPTIONS = [
 const formatDate = (dateInput: Date | string | null | undefined): string => {
   if (!dateInput) return 'N/A';
   const date = typeof dateInput === 'string' ? parseISO(dateInput) : dateInput;
-  if (!isValidDate(date)) return 'N/A'; // Retornar N/A em vez de Data Inválida para UI mais limpa
+  if (!isValidDate(date)) return 'N/A';
   return formatDateFns(date, 'dd/MM/yy', { locale: ptBR });
 };
 
@@ -63,13 +74,19 @@ export default function CampaignManagerPage() {
   const [editingCampaign, setEditingCampaign] = useState<Partial<CampaignFormData> | null>(null);
   
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
-  const [isLoadingData, setIsLoadingData] = useState(true); // Estado de loading geral para dados
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [availableClientAccounts, setAvailableClientAccounts] = useState<ClientAccountOption[]>([]);
   
-  // Estados dos Filtros
+  // Estados dos Filtros e Paginação/Ordenação
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterClientAccount, setFilterClientAccount] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   const neonColor = '#1E90FF';
   const primaryButtonStyle = `bg-gradient-to-r from-[${neonColor}] to-[#4682B4] hover:from-[#4682B4] hover:to-[${neonColor}] text-white font-semibold shadow-[0_4px_10px_rgba(30,144,255,0.4)]`;
@@ -86,33 +103,46 @@ export default function CampaignManagerPage() {
   };
   const selectContentStyle = "bg-[#1e2128] border-[#1E90FF]/30 text-white";
 
+  const fetchClientAccounts = useCallback(async () => {
+    if (!token) return;
+    try {
+      const response = await axios.get<ClientAccountOption[]>('/api/client-accounts', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAvailableClientAccounts(response.data || []);
+    } catch (error) {
+      console.error("Erro ao buscar contas de clientes:", error);
+      toast({ title: "Erro", description: "Falha ao carregar contas de clientes.", variant: "destructive" });
+      setAvailableClientAccounts([]);
+    }
+  }, [token, toast]);
 
   const fetchData = useCallback(async () => {
     if (!token) {
-        setIsLoadingData(false);
-        return;
+      setIsLoadingData(false);
+      return;
     }
     setIsLoadingData(true);
     try {
-      // Fetch client accounts
-      const clientAccountsResponse = await axios.get<ClientAccountOption[]>('/api/client-accounts', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const activeClientAccounts = clientAccountsResponse.data || [];
-      setAvailableClientAccounts(activeClientAccounts);
-
-      // Fetch campaigns com filtros
       const params = new URLSearchParams();
       if (filterStatus !== 'all') params.append('status', filterStatus);
       if (filterClientAccount !== 'all') params.append('selectedClientAccountId', filterClientAccount);
-      // Adicionar outros filtros como searchTerm se a API suportar busca no backend
-      // if (searchTerm) params.append('search', searchTerm); 
+      if (searchTerm.trim()) params.append('search', searchTerm.trim()); // Enviar busca para API
 
-      const campaignsResponse = await axios.get<CampaignFormData[]>(`/api/campaigns?${params.toString()}`, {
+      params.append('page', String(currentPage));
+      params.append('limit', String(itemsPerPage));
+      params.append('sortBy', sortBy);
+      params.append('sortOrder', sortOrder);
+
+      const response = await axios.get<PaginatedApiResponse<CampaignFormData>>(`/api/campaigns?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      const mappedCampaigns = (campaignsResponse.data || []).map(c => ({
+      const activeClientAccounts = availableClientAccounts.length > 0 ? availableClientAccounts : (await axios.get<ClientAccountOption[]>('/api/client-accounts', { headers: { Authorization: `Bearer ${token}` }})).data || [];
+      if(availableClientAccounts.length === 0 && activeClientAccounts.length > 0) setAvailableClientAccounts(activeClientAccounts);
+
+
+      const mappedCampaigns = (response.data.data || []).map(c => ({
         ...c,
         id: c.id!,
         clientAccountName: activeClientAccounts.find(acc => acc.id === c.selectedClientAccountId)?.name || 'N/A',
@@ -120,24 +150,35 @@ export default function CampaignManagerPage() {
         objectiveText: Array.isArray(c.objective) ? c.objective.join(', ') : (typeof c.objective === 'string' ? c.objective : 'N/A'),
       }));
       setCampaigns(mappedCampaigns);
-
+      setTotalItems(response.data.pagination.totalItems);
+      setTotalPages(response.data.pagination.totalPages);
+      // Não definir currentPage aqui, pois ele é o impulsionador da busca
     } catch (error) {
-      console.error("Erro ao buscar dados:", error);
-      toast({ title: "Erro de Carregamento", description: "Falha ao carregar dados da página.", variant: "destructive" });
-      setAvailableClientAccounts([]);
+      console.error("Erro ao buscar dados das campanhas:", error);
+      toast({ title: "Erro de Carregamento", description: "Falha ao carregar campanhas.", variant: "destructive" });
       setCampaigns([]);
+      setTotalItems(0);
+      setTotalPages(0);
     } finally {
       setIsLoadingData(false);
     }
-  }, [token, toast, filterStatus, filterClientAccount]); // Removido searchTerm daqui, filtro de busca será no frontend por enquanto
+  }, [token, toast, filterStatus, filterClientAccount, searchTerm, currentPage, itemsPerPage, sortBy, sortOrder, availableClientAccounts]);
+
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/login');
     } else if (!authLoading && isAuthenticated && token) {
-      fetchData();
+      fetchClientAccounts(); // Carrega contas de clientes primeiro
     }
-  }, [authLoading, isAuthenticated, router, token, fetchData]);
+  }, [authLoading, isAuthenticated, router, token, fetchClientAccounts]);
+
+  // Busca dados de campanha quando o token está disponível ou filtros/pagina/ordem mudam
+  useEffect(() => {
+    if (token) { // Não depende mais de availableClientAccounts aqui, pois fetchData pode buscá-las se necessário
+        fetchData();
+    }
+  }, [token, fetchData, currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm]); // Adicionado searchTerm como dependência
 
 
   const handleOpenForm = (campaign?: CampaignListItem) => {
@@ -156,56 +197,61 @@ export default function CampaignManagerPage() {
   };
 
   const handleSaveCampaign = async (formData: Partial<CampaignFormData>) => {
+    // ... (lógica de salvar como antes, mas fetchData será chamado para atualizar) ...
     if (!token) {
         toast({ title: "Erro de Autenticação", variant: "destructive" });
         return;
     }
-    setIsLoadingData(true); // Usar o loading geral
+    // Não precisa de setIsLoadingData(true) aqui, pois fetchData fará isso
     const method = formData.id ? 'PUT' : 'POST';
     const url = formData.id ? `/api/campaigns?id=${formData.id}` : '/api/campaigns';
     try {
-      await axios({ 
-        method, 
-        url, 
-        data: formData, 
-        headers: { Authorization: `Bearer ${token}` } 
-      });
+      await axios({ method, url, data: formData, headers: { Authorization: `Bearer ${token}` } });
       toast({ title: "Sucesso", description: `Campanha ${formData.id ? `"${formData.name}" atualizada` : `"${formData.name}" criada`}!` });
-      fetchData(); // Re-fetch todos os dados
+      setCurrentPage(1); // Voltar para a primeira página após salvar para ver o novo item (se não estiver ordenando por data de atualização)
+      fetchData(); 
     } catch (error: any) {
       toast({ title: "Erro ao Salvar", description: error.response?.data?.message || error.message || "Falha.", variant: "destructive" });
-      setIsLoadingData(false);
+      // setIsLoadingData(false); // fetchData cuidará disso
     }
     handleCloseForm();
   };
 
   const handleDeleteCampaign = async (campaignId: string, campaignName?: string) => {
+    // ... (lógica de deletar como antes, mas fetchData será chamado para atualizar) ...
     if (!token) {
         toast({ title: "Erro de Autenticação", variant: "destructive" });
         return;
     }
     if (!confirm(`Tem certeza que deseja excluir a campanha "${campaignName || campaignId}"?`)) return;
     
-    setIsLoadingData(true);
+    // setIsLoadingData(true);
     try {
-        await axios.delete(`/api/campaigns?id=${campaignId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        await axios.delete(`/api/campaigns?id=${campaignId}`, { headers: { Authorization: `Bearer ${token}` } });
         toast({ title: "Excluído", description: `Campanha "${campaignName || campaignId}" foi excluída.`, variant: "destructive" });
         fetchData();
     } catch (error: any) {
         toast({ title: "Erro ao Excluir", description: error.response?.data?.message || error.message || "Falha.", variant: "destructive" });
-        setIsLoadingData(false);
+        // setIsLoadingData(false);
     }
   };
+
+  const handleSort = (columnKey: string) => {
+    if (isLoadingData) return; // Não permitir mudar ordenação enquanto carrega
+    const newSortOrder = sortBy === columnKey && sortOrder === 'asc' ? 'desc' : 'asc';
+    setSortBy(columnKey);
+    setSortOrder(newSortOrder);
+    setCurrentPage(1); // Resetar para a primeira página ao mudar ordenação
+    // fetchData será chamado pelo useEffect que observa sortBy, sortOrder
+  };
   
-  // Filtro de busca no frontend
-  const filteredCampaigns = campaigns.filter(campaign => 
-    campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (campaign.clientAccountName && campaign.clientAccountName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (campaign.platformText && campaign.platformText.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (campaign.objectiveText && campaign.objectiveText.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const renderSortIcon = (columnKey: string) => {
+    if (sortBy === columnKey) {
+      return sortOrder === 'asc' ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />;
+    }
+    return null;
+  };
+
 
   if (authLoading && !token) return <Layout><div className="flex justify-center items-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></Layout>;
   if (!isAuthenticated && !authLoading) return null; 
@@ -224,7 +270,7 @@ export default function CampaignManagerPage() {
         </div>
 
         <Card className={cn(cardStyle, "p-3")}>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
             <div className="md:col-span-2 lg:col-span-2">
               <Label htmlFor="searchCampaign" className="text-xs text-gray-300 mb-1 block">Buscar Campanha</Label>
               <div className="relative">
@@ -234,13 +280,13 @@ export default function CampaignManagerPage() {
                     placeholder="Nome, cliente, plataforma, objetivo..." 
                     className={cn(neumorphicInputStyle, "pl-8 h-8 text-xs")} 
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}} // Resetar página na busca
                 />
               </div>
             </div>
             <div>
                 <Label htmlFor="filterStatus" className="text-xs text-gray-300 mb-1 block">Status</Label>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <Select value={filterStatus} onValueChange={(value) => {setFilterStatus(value); setCurrentPage(1);}}>
                     <SelectTrigger id="filterStatus" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue /></SelectTrigger>
                     <SelectContent className={selectContentStyle}>
                         {STATUS_OPTIONS.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
@@ -249,7 +295,7 @@ export default function CampaignManagerPage() {
             </div>
             <div>
                 <Label htmlFor="filterClientAccount" className="text-xs text-gray-300 mb-1 block">Conta de Cliente</Label>
-                <Select value={filterClientAccount} onValueChange={setFilterClientAccount} disabled={availableClientAccounts.length === 0}>
+                <Select value={filterClientAccount} onValueChange={(value) => {setFilterClientAccount(value); setCurrentPage(1);}} disabled={availableClientAccounts.length === 0}>
                     <SelectTrigger id="filterClientAccount" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue /></SelectTrigger>
                     <SelectContent className={selectContentStyle}>
                         <SelectItem value="all">Todas as Contas</SelectItem>
@@ -262,29 +308,29 @@ export default function CampaignManagerPage() {
 
         <Card className={cn(cardStyle)}>
           <CardHeader className="px-4 py-3 border-b border-[#1E90FF]/10">
-            <CardTitle className="text-base font-semibold text-white">Lista de Campanhas ({filteredCampaigns.length})</CardTitle>
+            <CardTitle className="text-base font-semibold text-white">Lista de Campanhas ({totalItems})</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {isLoadingData && !authLoading ? (
               <div className="flex justify-center items-center py-10"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="ml-2 text-gray-400">Carregando dados...</span></div>
-            ) : filteredCampaigns.length === 0 ? (
+            ) : campaigns.length === 0 ? ( // Usar campaigns.length aqui, pois filteredCampaigns pode estar vazio devido à busca
               <p className="text-center text-gray-400 py-10">Nenhuma campanha encontrada com os filtros atuais. {searchTerm && "Tente refinar sua busca ou "}Clique em "Adicionar Campanha".</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-[#1E90FF]/10 hover:bg-transparent">
-                      <TableHead className={cn(tableHeaderStyle, "pl-4 w-[25%]")}>Nome da Campanha</TableHead>
+                      <TableHead className={cn(tableHeaderStyle, "pl-4 w-[25%] cursor-pointer hover:text-white")} onClick={() => handleSort('name')}>Nome {renderSortIcon('name')}</TableHead>
                       <TableHead className={cn(tableHeaderStyle, "w-[20%]")}>Cliente Vinculado</TableHead>
                       <TableHead className={cn(tableHeaderStyle, "w-[15%]")}>Plataforma(s)</TableHead>
                       <TableHead className={cn(tableHeaderStyle, "w-[15%]")}>Objetivo(s)</TableHead>
-                      <TableHead className={cn(tableHeaderStyle, "text-center w-[10%]")}>Status</TableHead>
-                      <TableHead className={cn(tableHeaderStyle, "text-right w-[10%]")}>Orç. Diário</TableHead>
+                      <TableHead className={cn(tableHeaderStyle, "text-center w-[10%] cursor-pointer hover:text-white")} onClick={() => handleSort('status')}>Status {renderSortIcon('status')}</TableHead>
+                      <TableHead className={cn(tableHeaderStyle, "text-right w-[10%] cursor-pointer hover:text-white")} onClick={() => handleSort('daily_budget')}>Orç. Diário {renderSortIcon('daily_budget')}</TableHead>
                       <TableHead className={cn(tableHeaderStyle, "text-center pr-4 w-[5%]")}>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCampaigns.map(campaign => (
+                    {campaigns.map(campaign => ( // Iterar sobre 'campaigns' (dados da API), não 'filteredCampaigns' aqui
                       <TableRow key={campaign.id} className="border-b border-[#1E90FF]/5 hover:bg-[#0A0B0F]/50 transition-colors">
                         <TableCell className={cn(tableCellStyle, "font-medium pl-4 truncate")} title={campaign.name}>{campaign.name}</TableCell>
                         <TableCell className={cn(tableCellStyle, "truncate")} title={campaign.clientAccountName}>{campaign.clientAccountName || 'N/A'}</TableCell>
@@ -298,11 +344,7 @@ export default function CampaignManagerPage() {
                         <TableCell className={cn(tableCellStyle, "text-right")}>{formatCurrency(campaign.daily_budget)}</TableCell>
                         <TableCell className={cn(tableCellStyle, "text-center pr-4")}>
                            <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" className="h-7 w-7 p-0 data-[state=open]:bg-slate-700">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
+                            <DropdownMenuTrigger asChild><Button variant="ghost" className="h-7 w-7 p-0 data-[state=open]:bg-slate-700"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className={selectContentStyle}>
                               <DropdownMenuItem onClick={() => handleOpenForm(campaign)} className="cursor-pointer hover:!bg-[#1E90FF]/20"><Edit className="mr-2 h-3.5 w-3.5" /> Editar</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id!, campaign.name)} className="cursor-pointer !text-red-400 hover:!bg-red-700/30"><Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir</DropdownMenuItem>
@@ -316,6 +358,21 @@ export default function CampaignManagerPage() {
               </div>
             )}
           </CardContent>
+           {totalPages > 1 && (
+            <CardFooter className="py-3 px-4 border-t border-[#1E90FF]/10 flex items-center justify-end space-x-2">
+                <span className="text-xs text-gray-400">Página {currentPage} de {totalPages} ({totalItems} resultados)</span>
+                <Button
+                    variant="outline" size="sm" className={cn(neumorphicInputStyle, "h-7 px-2 text-xs")}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1 || isLoadingData}
+                > Anterior </Button>
+                <Button
+                    variant="outline" size="sm" className={cn(neumorphicInputStyle, "h-7 px-2 text-xs")}
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages || isLoadingData}
+                > Próxima </Button>
+            </CardFooter>
+           )}
         </Card>
       </div>
 
