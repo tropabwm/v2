@@ -20,7 +20,7 @@ DropdownMenuItem,
 DropdownMenuTrigger,
 }from '@/components/ui/dropdown-menu';//Para ações
 import {MoreHorizontal} from 'lucide-react';
-importLabelfrom '@/components/ui/label'; //Importação doLabel
+import Labelfrom '@/components/ui/label'; //Importação doLabel
 
 //Interface paraa campanhacomlistana página(podeserdiferentede CampaignFormData)
 interface CampaignListItem extendsCampaignFormData{
