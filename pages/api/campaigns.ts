@@ -24,7 +24,7 @@ interface CampaignInput {
     external_campaign_id?: string | null;
     user_id?: number | null;
     // Mapeamento CamelCase
-    selectedclientaccountid?: string | null;
+    selectedclientaccountid?: string | null; // Mantido para exemplo, mas o mapeamento explícito é melhor
     dailyBudget?: number | string | null;
     startDate?: string | null;
     endDate?: string | null;
@@ -32,6 +32,15 @@ interface CampaignInput {
     avgTicket?: number | string | null;
     externalCampaignId?: string | null;
     segmentationNotes?: string | null;
+    // Campos do schema original que podem ainda ser enviados pelo frontend ou são legados
+    clientName?: string | null;
+    productName?: string | null;
+    costTraffic?: number | string | null;
+    costCreative?: number | string | null;
+    costOperational?: number | string | null;
+    duration?: number | string | null;
+    purchaseFrequency?: number | string | null;
+    customerLifespan?: number | string | null;
 }
 
 interface CampaignDbRecord {
@@ -54,6 +63,7 @@ interface CampaignDbRecord {
     industry?: string | null;
     segmentation_notes?: string | null;
     avg_ticket?: number | null;
+    // Campos do schema original
     client_name?: string | null; 
     product_name?: string | null;
     cost_traffic?: number | null;
@@ -85,6 +95,7 @@ interface CampaignResponse {
     industry?: string | null;
     segmentationNotes?: string | null;
     avgTicket?: number | null;
+    // Campos do schema original para resposta
     clientName?: string | null;
     productName?: string | null;
     costTraffic?: number | null;
@@ -98,7 +109,19 @@ interface CampaignResponse {
     user_id?: number;
 }
 
-// --- Helpers (toSnakeCase, CampaignDbRecordExample, campaignDbSchemaKeys - como antes) ---
+// Interface para a resposta da listagem paginada
+interface PaginatedCampaignResponse {
+    data: CampaignResponse[];
+    pagination: {
+        totalItems: number;
+        totalPages: number;
+        currentPage: number;
+        pageSize: number;
+    };
+}
+
+
+// --- Helpers (toSnakeCase, CampaignDbRecordExample, campaignDbSchemaKeys) ---
 const toSnakeCase = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 
 class CampaignDbRecordExample implements Partial<CampaignDbRecord> {
@@ -133,6 +156,7 @@ const mapInputToDbFields = (input: CampaignInput): Partial<Omit<CampaignDbRecord
         costTraffic: 'cost_traffic',
         costCreative: 'cost_creative',
         costOperational: 'cost_operational',
+        // Adicionar outros mapeamentos camelCase para snake_case aqui
     };
 
     for (const camelKey in camelToSnakeMapping) {
@@ -158,8 +182,9 @@ const mapInputToDbFields = (input: CampaignInput): Partial<Omit<CampaignDbRecord
                         (dbFields as any)[snakeKey] = new Date(value as string).toISOString().slice(0, 10);
                     } catch { (dbFields as any)[snakeKey] = null; }
                 } else if (['budget', 'daily_budget', 'avg_ticket', 'cost_traffic', 'cost_creative', 'cost_operational', 'duration', 'purchase_frequency', 'customer_lifespan'].includes(snakeKey)) {
-                    (dbFields as any)[snakeKey] = (value !== null && value !== undefined && String(value).trim() !== "") ? Number(value) : null;
-                } else if (value === undefined || (typeof value === 'string' && value.trim() === '' && !['name', 'industry', 'status', 'target_audience_description', 'segmentation_notes', 'external_campaign_id', 'selected_client_account_id', 'external_platform_account_id', 'platform_source', 'client_name', 'product_name'].includes(snakeKey))) {
+                    const numVal = parseFloat(String(value));
+                    (dbFields as any)[snakeKey] = (value !== null && value !== undefined && String(value).trim() !== "" && !isNaN(numVal)) ? numVal : null;
+                } else if (value === undefined || (value === null) || (typeof value === 'string' && value.trim() === '' && !['name', 'industry', 'status', 'target_audience_description', 'segmentation_notes', 'external_campaign_id', 'selected_client_account_id', 'external_platform_account_id', 'platform_source', 'client_name', 'product_name'].includes(snakeKey))) {
                      (dbFields as any)[snakeKey] = null;
                 }
                 else {
@@ -226,19 +251,21 @@ const parseDbRecordToResponse = (dbRecord: CampaignDbRecord): CampaignResponse =
 };
 // --- FIM dos Helpers ---
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse<CampaignResponse | CampaignResponse[] | { message: string } | { error: string }>) {
+export default async function handler(
+    req: NextApiRequest, 
+    res: NextApiResponse<CampaignResponse | PaginatedCampaignResponse | { message: string } | { error: string }>
+) {
     console.log(`[API Campaigns Handler] Method: ${req.method}, URL: ${req.url}`);
     let dbConnection: mysql.PoolConnection | null = null;
 
-    // --- AUTENTICAÇÃO (Exemplo, descomente e adapte sua lógica real) ---
-    // const authUser = await verifyToken(req, res); // Sua função de verificar token
+    // --- AUTENTICAÇÃO ---
+    // const authUser = await verifyToken(req, res); 
     // if (!authUser || typeof authUser.id !== 'number') {
     //   return res.status(401).json({ message: 'Autenticação requerida ou inválida.' });
     // }
     // const userId = authUser.id;
     const userId = 1; // <<<< REMOVER/SUBSTITUIR POR AUTENTICAÇÃO REAL
     console.log(`[API Campaigns] User ID (mock/real): ${userId}`);
-
 
     try {
         const dbPool = getDbPool();
@@ -250,16 +277,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
             if (id && typeof id === 'string') {
                 const [rows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ? AND user_id = ?', [id, userId]);
                 if (rows.length > 0) {
-                    res.status(200).json(parseDbRecordToResponse(rows[0] as CampaignDbRecord));
+                    return res.status(200).json(parseDbRecordToResponse(rows[0] as CampaignDbRecord));
                 } else {
-                    res.status(404).json({ message: 'Campanha não encontrada' });
+                    return res.status(404).json({ message: 'Campanha não encontrada' });
                 }
             } else {
-                // Listagem com Filtros, Ordenação e Paginação
-                let baseQuery = 'FROM campaigns WHERE user_id = ?';
+                let baseSelect = 'SELECT *';
+                let baseFromWhere = 'FROM campaigns WHERE user_id = ?';
                 const queryParams: any[] = [userId];
                 
-                let whereClauses: string[] = [];
+                const whereClauses: string[] = [];
 
                 if (status && typeof status === 'string' && status !== 'all') {
                     whereClauses.push('status = ?');
@@ -271,38 +298,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
                 }
                 if (search && typeof search === 'string' && search.trim() !== '') {
                     const searchTerm = `%${search.trim()}%`;
-                    whereClauses.push('(name LIKE ? OR industry LIKE ? OR client_name LIKE ?)'); // Adapte os campos de busca
-                    queryParams.push(searchTerm, searchTerm, searchTerm);
+                    // Ajustar os campos de busca conforme necessário
+                    whereClauses.push('(name LIKE ? OR industry LIKE ? OR client_name LIKE ? OR external_campaign_id LIKE ?)'); 
+                    queryParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
                 }
 
                 if (whereClauses.length > 0) {
-                    baseQuery += ' AND ' + whereClauses.join(' AND ');
+                    baseFromWhere += ' AND ' + whereClauses.join(' AND ');
                 }
 
-                // Contagem para paginação (antes de adicionar ORDER BY e LIMIT para dados)
-                const countSql = `SELECT COUNT(*) as total ${baseQuery}`;
+                const countSql = `SELECT COUNT(*) as total ${baseFromWhere}`;
                 const [countRows] = await dbConnection.query<mysql.RowDataPacket[]>(countSql, queryParams);
                 const totalItems = countRows[0].total || 0;
 
-                // Ordenação
                 const allowedSortColumns = ['name', 'status', 'created_at', 'start_date', 'daily_budget', 'budget'];
-                let orderByClause = 'ORDER BY created_at DESC'; // Padrão
+                let orderByClause = 'ORDER BY created_at DESC'; 
                 if (sortBy && typeof sortBy === 'string' && allowedSortColumns.includes(sortBy)) {
                     const orderDirection = (typeof sortOrder === 'string' && sortOrder.toLowerCase() === 'desc') ? 'DESC' : 'ASC';
                     orderByClause = `ORDER BY ${dbConnection.escapeId(sortBy)} ${orderDirection}`;
                 }
                 
-                // Paginação
                 const currentPage = parseInt(page as string, 10) || 1;
-                const itemsPerPage = parseInt(limit as string, 10) || 10; // Default 10 itens
+                const itemsPerPage = parseInt(limit as string, 10) || 10; 
                 const offset = (currentPage - 1) * itemsPerPage;
                 const paginationClause = `LIMIT ${itemsPerPage} OFFSET ${offset}`;
 
-                const dataSql = `SELECT * ${baseQuery} ${orderByClause} ${paginationClause}`;
+                const dataSql = `${baseSelect} ${baseFromWhere} ${orderByClause} ${paginationClause}`;
                 const [dataRows] = await dbConnection.query<mysql.RowDataPacket[]>(dataSql, queryParams);
                 
-                res.status(200).json({
-                    // @ts-ignore // Temporário para contornar incompatibilidade de tipo na resposta com paginação
+                return res.status(200).json({
                     data: dataRows.map(row => parseDbRecordToResponse(row as CampaignDbRecord)),
                     pagination: {
                         totalItems,
@@ -314,7 +338,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
             }
         }
         else if (req.method === 'POST') {
-            // ... (lógica POST como antes, mas certifique-se que mapInputToDbFields e o INSERT SQL estão alinhados com CampaignDbRecord)
             const campaignRawInput: CampaignInput = req.body;
             if (!campaignRawInput.name?.trim()) return res.status(400).json({ error: 'Nome da campanha é obrigatório' });
             if (!campaignRawInput.selectedClientAccountId) return res.status(400).json({ error: 'Conta de Cliente Vinculada é obrigatória.' });
@@ -337,13 +360,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
             const [newCampaignRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ? AND user_id = ?', [newCampaignId, userId]);
             if (newCampaignRows.length > 0) {
-                res.status(201).json(parseDbRecordToResponse(newCampaignRows[0] as CampaignDbRecord));
+                return res.status(201).json(parseDbRecordToResponse(newCampaignRows[0] as CampaignDbRecord));
             } else {
-                res.status(500).json({ message: "Erro ao buscar campanha recém-criada" });
+                return res.status(500).json({ message: "Erro ao buscar campanha recém-criada" });
             }
         }
         else if (req.method === 'PUT') {
-            // ... (lógica PUT como antes, mas certifique-se que mapInputToDbFields e o UPDATE SQL estão alinhados)
             const { id } = req.query;
             const updateRawData: Partial<CampaignInput> = req.body;
             const updateDbData = mapInputToDbFields(updateRawData); 
@@ -365,35 +387,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
             const [updatedCampaignRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ? AND user_id = ?', [id, userId]);
             if (updatedCampaignRows.length > 0) {
-                res.status(200).json(parseDbRecordToResponse(updatedCampaignRows[0] as CampaignDbRecord));
+                return res.status(200).json(parseDbRecordToResponse(updatedCampaignRows[0] as CampaignDbRecord));
             } else {
-                res.status(404).json({ message: 'Campanha não encontrada após atualização.' });
+                // Isso pode acontecer se a campanha existir mas não pertencer ao user_id, ou algum outro erro
+                return res.status(404).json({ message: 'Campanha não encontrada ou não pôde ser atualizada.' });
             }
         }
         else if (req.method === 'DELETE') {
-            // ... (lógica DELETE como antes) ...
             const { id } = req.query;
             if (!id || typeof id !== 'string') {
                 return res.status(400).json({ message: 'ID da campanha é obrigatório.' });
             }
+            // Adicionar lógica para deletar de tabelas relacionadas se não houver ON DELETE CASCADE configurado no DB
+            // Ex: await dbConnection.query('DELETE FROM daily_metrics WHERE campaign_id = ? AND user_id = ?', [id, userId]);
             const [result] = await dbConnection.query<mysql.ResultSetHeader>('DELETE FROM campaigns WHERE id = ? AND user_id = ?', [id, userId]);
             if (result.affectedRows === 0) {
                 return res.status(404).json({ message: 'Campanha não encontrada para exclusão.' });
             }
-            res.status(204).end();
+            return res.status(204).end();
         }
         else {
             res.setHeader('Allow', ['GET', 'POST', 'PUT', 'DELETE']);
-            res.status(405).json({ message: `Método ${req.method} não permitido` });
+            return res.status(405).json({ message: `Método ${req.method} não permitido` });
         }
 
     } catch (err: any) {
-        console.error(`[API Campaigns ${req?.method}] Erro:`, err);
-        res.status(500).json({ message: 'Erro interno do servidor', error: err?.message, code: err.code });
+        console.error(`[API Campaigns ${req?.method || 'Unknown'}] Erro GERAL no try/catch:`, err.message, err.stack, err.code, err.sqlMessage);
+        // Resposta de erro corrigida
+        return res.status(500).json({ message: `Erro interno do servidor: ${err?.message || 'Erro desconhecido.'}${err?.code ? ` (Código: ${err.code})` : ''}` });
     } finally {
         if (dbConnection) {
             dbConnection.release();
-            console.log(`[API Campaigns ${req?.method}] Conexão com DB liberada.`);
+            console.log(`[API Campaigns ${req?.method || 'Unknown'}] Conexão com DB liberada.`);
         }
     }
 }
