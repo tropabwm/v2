@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { useToast } from '@/components/ui/use-toast';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { CalendarIcon, DollarSign, Info, Megaphone, Users, Briefcase, Link2, Percent, Settings } from 'lucide-react'; // Adicionado Link2, Percent, Settings
