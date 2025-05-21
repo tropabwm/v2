@@ -6,63 +6,37 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
-import { PlusCircle, ListFilter, Search, Edit, Trash2, ExternalLink, MoreHorizontal } from 'lucide-react';
+import { PlusCircle, ListFilter, Search, Edit, Trash2, MoreHorizontal } from 'lucide-react';
 import CampaignManagerForm, { CampaignFormData, ClientAccountOption } from '@/components/CampaignManagerForm';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/router';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge"; // Para status
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';// Para ações
-import { Label } from '@/components/ui/label'; // Importação do Label
+} from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
+import axios from 'axios'; // <<< IMPORTAR AXIOS
 
-// Interface para a campanha com lista na página (pode ser diferente de CampaignFormData)
 interface CampaignListItem extends CampaignFormData {
-  id: string; // ID é obrigatório na lista
-  clientAccountName?: string; // Nome da conta do cliente para exibição
-  platformText?: string; // Plataformas formatadas para exibição
+  id: string;
+  clientAccountName?: string;
+  platformText?: string;
 }
-
-// DADOS MOCKADOS - SUBSTITUIR PELA API REAL
-const MOCK_AVAILABLE_CLIENT_ACCOUNTS: ClientAccountOption[] = [
-  { id: 'client_acc_1', name: 'Loja XPTO - Google Ads', platform: 'google', platformAccountId: 'customers/1234567890' },
-  { id: 'client_acc_2', name: 'Serviços ABC - Meta Ads', platform: 'meta', platformAccountId: 'act_9876543210' },
-  { id: 'client_acc_3', name: 'Imobiliária Z - Google Ads', platform: 'google', platformAccountId: 'customers/1122334455' },
-];
-
-const MOCK_CAMPAIGNS: CampaignListItem[] = [
-  {
-    id: 'camp1', name: 'Promoção Verão - Loja XPTO', status: 'active',
-    selectedClientAccountId: 'client_acc_1', clientAccountName: 'Loja XPTO - Google Ads',
-    platform: ['google'], platformText: 'Google Ads',
-    daily_budget: 50, start_date: new Date('2024-01-15'),
-    objective: ['vendas'], ad_format: ['imagem'],
-  },
-  {
-    id: 'camp2', name: 'Leads Qualificados - Serviços ABC', status: 'paused',
-    selectedClientAccountId: 'client_acc_2', clientAccountName: 'Serviços ABC - Meta Ads',
-    platform: ['meta'], platformText: 'Meta Ads',
-    daily_budget: 30, start_date: new Date('2024-02-01'),
-    objective: ['leads'], ad_format: ['video'],
-  },
-];
-// FIM DOS DADOS MOCKADOS
 
 const MOCK_STATUSES = [{value: 'draft', label: 'Rascunho'}, {value: 'active', label: 'Ativa'}, {value: 'paused', label: 'Pausada'}, {value: 'completed', label: 'Concluída'}];
 
-
 export default function CampaignManagerPage() {
-  const { isAuthenticated, isLoading: authLoading, token } = useAuth(); // Adicionado token
+  const { isAuthenticated, isLoading: authLoading, token } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Partial<CampaignFormData> | null>(null);
-
+  
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(true);
   const [availableClientAccounts, setAvailableClientAccounts] = useState<ClientAccountOption[]>([]);
@@ -82,50 +56,71 @@ export default function CampaignManagerPage() {
     archived: 'bg-slate-600/80 border-slate-500/50 text-slate-300',
   };
 
-
   const fetchClientAccounts = useCallback(async () => {
     if (!token) return;
-    // TODO: Implementar API real: GET /api/client-accounts (ou similar)
-    // Por enquanto, usar mock
-    console.log("Simulando fetch de contas de clientes...");
-    setAvailableClientAccounts(MOCK_AVAILABLE_CLIENT_ACCOUNTS);
-  }, [token]);
+    try {
+      const response = await axios.get<ClientAccountOption[]>('/api/client-accounts', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAvailableClientAccounts(response.data);
+    } catch (error) {
+      console.error("Erro ao buscar contas de clientes:", error);
+      toast({ title: "Erro", description: "Falha ao carregar contas de clientes.", variant: "destructive" });
+      setAvailableClientAccounts([]); // Define como array vazio em caso de erro
+    }
+  }, [token, toast]);
 
   const fetchCampaigns = useCallback(async () => {
-    if (!token) return;
+    if (!token || availableClientAccounts.length === 0) { // Espera ter as contas de cliente para mapear nomes
+        if (token && availableClientAccounts.length === 0) {
+            // Se o token existe mas as contas não foram carregadas (ex: erro no fetchClientAccounts), não prosseguir ou mostrar aviso
+            console.warn("fetchCampaigns: Contas de cliente ainda não carregadas ou vazias.");
+        }
+        setIsLoadingCampaigns(false); // Parar o loading se não puder prosseguir
+        return;
+    }
     setIsLoadingCampaigns(true);
-    // TODO: Implementar API real: GET /api/campaigns
-    // Por enquanto, usar mock e mapear para CampaignListItem
-    console.log("Simulando fetch de campanhas...");
-    const mappedMockCampaigns = MOCK_CAMPAIGNS.map(c => {
-      return {
+    try {
+      const response = await axios.get<CampaignFormData[]>('/api/campaigns', { // Espera CampaignFormData da API
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const mappedCampaigns = response.data.map(c => ({
         ...c,
-        clientAccountName: MOCK_AVAILABLE_CLIENT_ACCOUNTS.find(acc => acc.id === c.selectedClientAccountId)?.name || 'N/A',
-        platformText: c.platform?.join(', ') || 'N/A', // Ajustar conforme a estrutura real de 'platform'
-      };
-    });
-    setCampaigns(mappedMockCampaigns);
-    setIsLoadingCampaigns(false);
-  }, [token]);
-
+        id: c.id!, // API deve sempre retornar ID
+        clientAccountName: availableClientAccounts.find(acc => acc.id === c.selectedClientAccountId)?.name || 'N/A',
+        platformText: Array.isArray(c.platform) ? c.platform.join(', ') : (typeof c.platform === 'string' ? c.platform : 'N/A'),
+      }));
+      setCampaigns(mappedCampaigns);
+    } catch (error) {
+      console.error("Erro ao buscar campanhas:", error);
+      toast({ title: "Erro", description: "Falha ao carregar campanhas.", variant: "destructive" });
+    } finally {
+      setIsLoadingCampaigns(false);
+    }
+  }, [token, toast, availableClientAccounts]); // Adicionado availableClientAccounts como dependência
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/login');
     } else if (!authLoading && isAuthenticated && token) {
-      fetchClientAccounts();
+      fetchClientAccounts(); // Carrega primeiro as contas de clientes
+    }
+  }, [authLoading, isAuthenticated, router, token, fetchClientAccounts]);
+
+  // Efeito separado para buscar campanhas APÓS as contas de clientes serem carregadas
+  useEffect(() => {
+    if (token && availableClientAccounts.length > 0) {
       fetchCampaigns();
     }
-  }, [authLoading, isAuthenticated, router, token, fetchClientAccounts, fetchCampaigns]);
+  }, [token, availableClientAccounts, fetchCampaigns]);
+
 
   const handleOpenForm = (campaign?: CampaignListItem) => {
-    // Mapear CampaignListItem para CampaignFormData se necessário para edição
-    const formDataForEdit = campaign ? {
-      ...campaign,
-      // Garanta que os campos de data sejam objetos Date se vierem como string da lista
-      start_date: campaign.start_date ? new Date(campaign.start_date) : null,
-      end_date: campaign.end_date ? new Date(campaign.end_date) : null,
-    } : null;
+    const formDataForEdit = campaign ? { 
+        ...campaign,
+        start_date: campaign.start_date ? new Date(campaign.start_date) : null,
+        end_date: campaign.end_date ? new Date(campaign.end_date) : null,
+     } : null;
     setEditingCampaign(formDataForEdit);
     setIsFormOpen(true);
   };
@@ -136,45 +131,57 @@ export default function CampaignManagerPage() {
   };
 
   const handleSaveCampaign = async (formData: Partial<CampaignFormData>) => {
-    setIsLoadingCampaigns(true); // Mostrar feedback de carregamento na lista
-    console.log("Salvando campanha (frontend):", formData);
-    // TODO: Implementar chamada à API POST/PUT /api/campaigns
-    // Exemplo:
-    // const method = formData.id ? 'PUT' : 'POST';
-    // const url = formData.id ? `/api/campaigns?id=${formData.id}` : '/api/campaigns';
-    // try {
-    //   await axios({ method, url, data: formData, headers: { Authorization: `Bearer ${token}` } });
-    //   toast({ title: "Sucesso", description: `Campanha ${formData.id ? 'atualizada' : 'criada'}!` });
-    //   fetchCampaigns(); // Re-fetch da lista
-    // } catch (error: any) {
-    //   toast({ title: "Erro", description: error.response?.data?.message || "Falha ao salvar.", variant: "destructive" });
-    //   setIsLoadingCampaigns(false);
-    // }
-    // Mock de sucesso por enquanto:
-    setTimeout(() => {
-      toast({ title: "Sucesso (Mock)", description: `Campanha ${formData.id ? `"${formData.name}" atualizada` : `"${formData.name}" criada`}!` });
-      fetchCampaigns(); // Re-fetch (ainda usará mock)
-    }, 500);
+    if (!token) {
+        toast({ title: "Erro de Autenticação", description: "Sessão expirada ou inválida.", variant: "destructive" });
+        return;
+    }
+    setIsLoadingCampaigns(true);
+    const method = formData.id ? 'PUT' : 'POST';
+    const url = formData.id ? `/api/campaigns?id=${formData.id}` : '/api/campaigns';
+    try {
+      await axios({ 
+        method, 
+        url, 
+        data: formData, 
+        headers: { Authorization: `Bearer ${token}` } 
+      });
+      toast({ title: "Sucesso", description: `Campanha ${formData.id ? `"${formData.name}" atualizada` : `"${formData.name}" criada`}!` });
+      fetchCampaigns(); 
+    } catch (error: any) {
+      toast({ title: "Erro ao Salvar", description: error.response?.data?.message || error.message || "Falha ao salvar campanha.", variant: "destructive" });
+      setIsLoadingCampaigns(false); // Para o loading apenas em caso de erro, fetchCampaigns fará em caso de sucesso
+    }
     handleCloseForm();
   };
 
-  const handleDeleteCampaign = async (campaignId: string) => {
-    if (!confirm("Tem certeza que deseja excluir esta campanha? Esta ação não pode ser desfeita.")) return;
-    // TODO: Implementar chamada à API DELETE /api/campaigns?id=${campaignId}
-    console.log("Excluindo campanha ID:", campaignId);
-    toast({ title: "Excluído (Mock)", description: `Campanha ${campaignId} excluída.`, variant: "destructive" });
-    // setCampaigns(prev => prev.filter(c => c.id !== campaignId)); // Atualização otimista
-    fetchCampaigns(); // Ou re-fetch
+  const handleDeleteCampaign = async (campaignId: string, campaignName?: string) => {
+    if (!token) {
+        toast({ title: "Erro de Autenticação", description: "Sessão expirada ou inválida.", variant: "destructive" });
+        return;
+    }
+    if (!confirm(`Tem certeza que deseja excluir a campanha "${campaignName || campaignId}"? Esta ação não pode ser desfeita.`)) return;
+    
+    setIsLoadingCampaigns(true);
+    try {
+        await axios.delete(`/api/campaigns?id=${campaignId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        toast({ title: "Excluído", description: `Campanha "${campaignName || campaignId}" foi excluída.`, variant: "destructive" });
+        fetchCampaigns();
+    } catch (error: any) {
+        toast({ title: "Erro ao Excluir", description: error.response?.data?.message || error.message || "Falha ao excluir campanha.", variant: "destructive" });
+        setIsLoadingCampaigns(false);
+    }
   };
-
-  const filteredCampaigns = campaigns.filter(campaign =>
+  
+  const filteredCampaigns = campaigns.filter(campaign => 
     campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (campaign.clientAccountName && campaign.clientAccountName.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (campaign.platformText && campaign.platformText.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   if (authLoading && !token) return <Layout><div className="p-6 text-center">Carregando autenticação...</div></Layout>;
-  if (!isAuthenticated && !authLoading) return null;
+  if (!isAuthenticated && !authLoading) return null; 
 
   return (
     <Layout>
@@ -195,16 +202,15 @@ export default function CampaignManagerPage() {
               <Label htmlFor="searchCampaign" className="text-xs text-gray-300 mb-1 block">Buscar (Nome, Cliente, Plataforma)</Label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  id="searchCampaign"
-                  placeholder="Digite para buscar..."
-                  className={cn(neumorphicInputStyle, "pl-8 h-8 text-xs")}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                <Input 
+                    id="searchCampaign" 
+                    placeholder="Digite para buscar..." 
+                    className={cn(neumorphicInputStyle, "pl-8 h-8 text-xs")} 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
             </div>
-            {/* TODO: Adicionar mais filtros (Status, Plataforma, Cliente) */}
             <Button variant="outline" className="bg-[#141414] border-none text-white shadow-[3px_3px_6px_rgba(0,0,0,0.3),-3px_-3px_6px_rgba(255,255,255,0.05)] hover:bg-[#1E90FF]/80 h-8 text-xs mt-3 md:mt-0">
               <ListFilter className="mr-2 h-3.5 w-3.5" /> Aplicar Filtros
             </Button>
@@ -216,7 +222,7 @@ export default function CampaignManagerPage() {
             <CardTitle className="text-base font-semibold text-white">Lista de Campanhas</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {isLoadingCampaigns && !authLoading ? ( // Não mostrar loader de campanhas se auth está carregando
+            {isLoadingCampaigns && !authLoading ? (
               <p className="text-center text-gray-400 py-10">Carregando campanhas...</p>
             ) : filteredCampaigns.length === 0 ? (
               <p className="text-center text-gray-400 py-10">Nenhuma campanha encontrada. {searchTerm && "Tente refinar sua busca ou "}Clique em "Adicionar Campanha".</p>
@@ -230,7 +236,7 @@ export default function CampaignManagerPage() {
                       <TableHead className={tableHeaderStyle}>Plataforma(s)</TableHead>
                       <TableHead className={cn(tableHeaderStyle, "text-center")}>Status</TableHead>
                       <TableHead className={cn(tableHeaderStyle, "text-right pr-4")}>Orçamento Diário</TableHead>
-                      <TableHead className={cn(tableHeaderStyle, "text-center")}>Ações</TableHead>
+                      <TableHead className={cn(tableHeaderStyle, "text-center pr-4")}>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -241,14 +247,14 @@ export default function CampaignManagerPage() {
                         <TableCell className={tableCellStyle}>{campaign.platformText || 'N/A'}</TableCell>
                         <TableCell className={cn(tableCellStyle, "text-center")}>
                           <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0.5 border", statusBadgeColors[campaign.status.toLowerCase()] || statusBadgeColors.draft)}>
-                            {MOCK_STATUSES.find(s => s.value === campaign.status)?.label || campaign.status}
+                            {MOCK_STATUSES.find(s=>s.value === campaign.status)?.label || campaign.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className={cn(tableCellStyle, "text-right pr-4")}> {/* Adicionado pr-4 para consistência */}
+                        <TableCell className={cn(tableCellStyle, "text-right pr-4")}>
                           {campaign.daily_budget ? `R$ ${Number(campaign.daily_budget).toFixed(2)}` : 'N/A'}
                         </TableCell>
-                        <TableCell className={cn(tableCellStyle, "text-center pr-4")}> {/* Adicionado pr-4 para consistência */}
-                          <DropdownMenu>
+                        <TableCell className={cn(tableCellStyle, "text-center pr-4")}>
+                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" className="h-7 w-7 p-0 data-[state=open]:bg-slate-700">
                                 <MoreHorizontal className="h-4 w-4" />
@@ -256,9 +262,7 @@ export default function CampaignManagerPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="bg-[#1e2128] border-[#1E90FF]/30 text-white">
                               <DropdownMenuItem onClick={() => handleOpenForm(campaign)} className="cursor-pointer hover:!bg-[#1E90FF]/20"><Edit className="mr-2 h-3.5 w-3.5" /> Editar</DropdownMenuItem>
-                              {/* <DropdownMenuItem className="cursor-pointer hover:!bg-[#1E90FF]/20"><BarChartBig className="mr-2 h-3.5 w-3.5" /> Ver Detalhes</DropdownMenuItem> */}
-                              {/* <DropdownMenuItem className="cursor-pointer hover:!bg-[#1E90FF]/20"><ExternalLink className="mr-2 h-3.5 w-3.5" /> Abrir na Plataforma</DropdownMenuItem> */}
-                              <DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id!)} className="cursor-pointer !text-red-400 hover:!bg-red-700/30"><Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id!, campaign.name)} className="cursor-pointer !text-red-400 hover:!bg-red-700/30"><Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
