@@ -108,9 +108,9 @@ export default function CampaignManagerPage() {
       const response = await axios.get<ClientAccountOption[]>('/api/client-accounts', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      console.log('[ClientAccounts] API Response:', response);
-      console.log('[ClientAccounts] response.data:', response.data);
-      console.log('[ClientAccounts] Is response.data an array?:', Array.isArray(response.data));
+      console.log('[ClientAccounts] API Response:', response); 
+      console.log('[ClientAccounts] response.data:', response.data); 
+      console.log('[ClientAccounts] Is response.data an array?:', Array.isArray(response.data)); 
       setAvailableClientAccounts(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error("Erro ao buscar contas de clientes:", error);
@@ -133,15 +133,17 @@ export default function CampaignManagerPage() {
         console.log("[Campaigns] availableClientAccounts is empty, attempting to fetch them within fetchData.");
         try {
             const clientAccountsResponse = await axios.get<ClientAccountOption[]>('/api/client-accounts', { headers: { Authorization: `Bearer ${token}` }});
-            console.log('[Campaigns] Inner fetchClientAccounts Response.data:', clientAccountsResponse.data);
+            console.log('[Campaigns] Inner fetchClientAccounts Response.data:', clientAccountsResponse.data); 
             currentClientAccounts = Array.isArray(clientAccountsResponse.data) ? clientAccountsResponse.data : [];
-            if(availableClientAccounts.length === 0) setAvailableClientAccounts(currentClientAccounts);
+            if(availableClientAccounts.length === 0 && currentClientAccounts.length > 0) { // Só atualiza se o estado global ainda estava vazio
+                 setAvailableClientAccounts(currentClientAccounts);
+            }
         } catch (error) {
             console.error("Erro ao buscar contas de clientes dentro de fetchData:", error);
-            currentClientAccounts = [];
+            currentClientAccounts = []; // Garante que é um array para o mapeamento
         }
     }
-    console.log("[Campaigns] Using client accounts for mapping:", currentClientAccounts, Array.isArray(currentClientAccounts));
+    console.log("[Campaigns] Using client accounts for mapping (before API call):", currentClientAccounts, Array.isArray(currentClientAccounts));
 
 
     try {
@@ -159,15 +161,20 @@ export default function CampaignManagerPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      console.log('[Campaigns] API /api/campaigns Full Response:', response);
-      console.log('[Campaigns] API /api/campaigns response.data:', response.data);
+      console.log('[Campaigns] API /api/campaigns Full Response:', response); 
+      console.log('[Campaigns] API /api/campaigns response.data:', response.data); 
       
       if (response.data && response.data.pagination && Array.isArray(response.data.data)) {
-        console.log('[Campaigns] response.data.data IS an array. Length:', response.data.data.length);
-        const mappedCampaigns = response.data.data.map(c => ({
+        console.log('[Campaigns] response.data.data IS an array. Length:', response.data.data.length); 
+        const campaignsFromApi = response.data.data;
+        
+        // Garante que currentClientAccounts é um array para o .find
+        const finalClientAccountsForMap = Array.isArray(currentClientAccounts) ? currentClientAccounts : [];
+
+        const mappedCampaigns = campaignsFromApi.map(c => ({
           ...c,
           id: c.id!,
-          clientAccountName: currentClientAccounts.find(acc => acc.id === c.selectedClientAccountId)?.name || 'N/A',
+          clientAccountName: finalClientAccountsForMap.find(acc => acc.id === c.selectedClientAccountId)?.name || 'N/A',
           platformText: Array.isArray(c.platform) ? c.platform.join(', ') : (typeof c.platform === 'string' ? c.platform : 'N/A'),
           objectiveText: Array.isArray(c.objective) ? c.objective.join(', ') : (typeof c.objective === 'string' ? c.objective : 'N/A'),
         }));
@@ -205,7 +212,8 @@ export default function CampaignManagerPage() {
     if (token) { 
         fetchData();
     }
-  }, [token, fetchData]); // Removido dependências que já estão em fetchData para evitar loops excessivos. fetchData em si tem as dependências corretas.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm, token]); // Removido fetchData daqui, pois suas dependências já estão listadas e fetchData em si é useCallback
 
 
   const handleOpenForm = (campaign?: CampaignListItem) => {
@@ -251,7 +259,7 @@ export default function CampaignManagerPage() {
     try {
         await axios.delete(`/api/campaigns?id=${campaignId}`, { headers: { Authorization: `Bearer ${token}` } });
         toast({ title: "Excluído", description: `Campanha "${campaignName || campaignId}" foi excluída.`, variant: "destructive" });
-        if (campaigns.length === 1 && currentPage > 1) {
+        if (campaigns.length === 1 && currentPage > 1 && totalItems > 1) { // Evitar página negativa se for o último item geral
             setCurrentPage(currentPage - 1);
         } else {
             fetchData();
@@ -275,14 +283,6 @@ export default function CampaignManagerPage() {
     }
     return <span className="h-3 w-3 ml-1 inline-block"></span>;
   };
-
-  // Efeito para rebuscar dados quando filtros, página ou ordenação mudam
-  useEffect(() => {
-    if (token) { // Apenas buscar se houver token
-        fetchData();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm, token]); // fetchData não precisa estar aqui se suas dependências internas já cobrem isso.
 
 
   if (authLoading && !token) return <Layout><div className="flex justify-center items-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></Layout>;
@@ -331,7 +331,8 @@ export default function CampaignManagerPage() {
                     <SelectTrigger id="filterClientAccount" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue placeholder={isLoadingData && availableClientAccounts.length === 0 ? "Carregando..." : "Selecione..."} /></SelectTrigger>
                     <SelectContent className={selectContentStyle}>
                         <SelectItem value="all">Todas as Contas</SelectItem>
-                        {availableClientAccounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.platform.toUpperCase()})</SelectItem>))}
+                        {console.log('[Render] availableClientAccounts for Select:', availableClientAccounts, Array.isArray(availableClientAccounts))}
+                        {Array.isArray(availableClientAccounts) && availableClientAccounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.platform.toUpperCase()})</SelectItem>))}
                     </SelectContent>
                 </Select>
             </div>
@@ -349,6 +350,7 @@ export default function CampaignManagerPage() {
               <p className="text-center text-gray-400 py-10">Nenhuma campanha encontrada com os filtros atuais. {searchTerm && "Tente refinar sua busca ou "}Clique em "Adicionar Campanha".</p>
             ) : (
               <div className="overflow-x-auto">
+                {console.log('[Render] Campaigns before table map:', campaigns, Array.isArray(campaigns))}
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-[#1E90FF]/10 hover:bg-transparent">
@@ -411,13 +413,16 @@ export default function CampaignManagerPage() {
       </div>
 
       {isFormOpen && (
-        <CampaignManagerForm
+        <>
+         {console.log('[Render] availableClientAccounts for form:', availableClientAccounts, Array.isArray(availableClientAccounts))}
+         <CampaignManagerForm
           isOpen={isFormOpen}
           onClose={handleCloseForm}
           onSave={handleSaveCampaign}
           campaignData={editingCampaign}
           availableClientAccounts={availableClientAccounts}
-        />
+         />
+        </>
       )}
     </Layout>
   );
