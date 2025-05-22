@@ -7,11 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from "@/lib/utils";
-import { PlusCircle, ListFilter, Search, Edit, Trash2, MoreHorizontal, Loader2, ChevronUp, ChevronDown } from 'lucide-react'; // Adicionado ChevronUp, ChevronDown
+import { PlusCircle, ListFilter, Search, Edit, Trash2, MoreHorizontal, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
 import CampaignManagerForm, { CampaignFormData, ClientAccountOption } from '@/components/CampaignManagerForm';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/router';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; // <<< CardFooter adicionado
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -55,7 +55,7 @@ const STATUS_OPTIONS = [
 const formatDate = (dateInput: Date | string | null | undefined): string => {
   if (!dateInput) return 'N/A';
   const date = typeof dateInput === 'string' ? parseISO(dateInput) : dateInput;
-  if (!isValidDate(date)) return 'N/A';
+  if (!isValidDate(date)) return 'N/A'; 
   return formatDateFns(date, 'dd/MM/yy', { locale: ptBR });
 };
 
@@ -77,7 +77,6 @@ export default function CampaignManagerPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [availableClientAccounts, setAvailableClientAccounts] = useState<ClientAccountOption[]>([]);
   
-  // Estados dos Filtros e Paginação/Ordenação
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterClientAccount, setFilterClientAccount] = useState<string>('all');
@@ -123,11 +122,23 @@ export default function CampaignManagerPage() {
       return;
     }
     setIsLoadingData(true);
+    let activeClientAccounts = availableClientAccounts;
+    if (activeClientAccounts.length === 0) {
+        try {
+            const clientAccountsResponse = await axios.get<ClientAccountOption[]>('/api/client-accounts', { headers: { Authorization: `Bearer ${token}` }});
+            activeClientAccounts = clientAccountsResponse.data || [];
+            setAvailableClientAccounts(activeClientAccounts); // Atualiza o estado se buscou agora
+        } catch (error) {
+             console.error("Erro ao buscar contas de clientes em fetchData:", error);
+             activeClientAccounts = []; // Garante que é um array
+        }
+    }
+
     try {
       const params = new URLSearchParams();
       if (filterStatus !== 'all') params.append('status', filterStatus);
       if (filterClientAccount !== 'all') params.append('selectedClientAccountId', filterClientAccount);
-      if (searchTerm.trim()) params.append('search', searchTerm.trim()); // Enviar busca para API
+      if (searchTerm.trim()) params.append('search', searchTerm.trim());
 
       params.append('page', String(currentPage));
       params.append('limit', String(itemsPerPage));
@@ -138,10 +149,6 @@ export default function CampaignManagerPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      const activeClientAccounts = availableClientAccounts.length > 0 ? availableClientAccounts : (await axios.get<ClientAccountOption[]>('/api/client-accounts', { headers: { Authorization: `Bearer ${token}` }})).data || [];
-      if(availableClientAccounts.length === 0 && activeClientAccounts.length > 0) setAvailableClientAccounts(activeClientAccounts);
-
-
       const mappedCampaigns = (response.data.data || []).map(c => ({
         ...c,
         id: c.id!,
@@ -152,7 +159,6 @@ export default function CampaignManagerPage() {
       setCampaigns(mappedCampaigns);
       setTotalItems(response.data.pagination.totalItems);
       setTotalPages(response.data.pagination.totalPages);
-      // Não definir currentPage aqui, pois ele é o impulsionador da busca
     } catch (error) {
       console.error("Erro ao buscar dados das campanhas:", error);
       toast({ title: "Erro de Carregamento", description: "Falha ao carregar campanhas.", variant: "destructive" });
@@ -169,16 +175,15 @@ export default function CampaignManagerPage() {
     if (!authLoading && !isAuthenticated) {
       router.push('/login');
     } else if (!authLoading && isAuthenticated && token) {
-      fetchClientAccounts(); // Carrega contas de clientes primeiro
+      fetchClientAccounts(); 
     }
   }, [authLoading, isAuthenticated, router, token, fetchClientAccounts]);
 
-  // Busca dados de campanha quando o token está disponível ou filtros/pagina/ordem mudam
   useEffect(() => {
-    if (token) { // Não depende mais de availableClientAccounts aqui, pois fetchData pode buscá-las se necessário
+    if (token) { 
         fetchData();
     }
-  }, [token, fetchData, currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm]); // Adicionado searchTerm como dependência
+  }, [token, fetchData, currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm]);
 
 
   const handleOpenForm = (campaign?: CampaignListItem) => {
@@ -197,59 +202,57 @@ export default function CampaignManagerPage() {
   };
 
   const handleSaveCampaign = async (formData: Partial<CampaignFormData>) => {
-    // ... (lógica de salvar como antes, mas fetchData será chamado para atualizar) ...
     if (!token) {
         toast({ title: "Erro de Autenticação", variant: "destructive" });
         return;
     }
-    // Não precisa de setIsLoadingData(true) aqui, pois fetchData fará isso
     const method = formData.id ? 'PUT' : 'POST';
     const url = formData.id ? `/api/campaigns?id=${formData.id}` : '/api/campaigns';
     try {
       await axios({ method, url, data: formData, headers: { Authorization: `Bearer ${token}` } });
       toast({ title: "Sucesso", description: `Campanha ${formData.id ? `"${formData.name}" atualizada` : `"${formData.name}" criada`}!` });
-      setCurrentPage(1); // Voltar para a primeira página após salvar para ver o novo item (se não estiver ordenando por data de atualização)
+      if (method === 'POST') setCurrentPage(1); // Se for nova, vai pra primeira página
       fetchData(); 
     } catch (error: any) {
       toast({ title: "Erro ao Salvar", description: error.response?.data?.message || error.message || "Falha.", variant: "destructive" });
-      // setIsLoadingData(false); // fetchData cuidará disso
     }
     handleCloseForm();
   };
 
   const handleDeleteCampaign = async (campaignId: string, campaignName?: string) => {
-    // ... (lógica de deletar como antes, mas fetchData será chamado para atualizar) ...
     if (!token) {
         toast({ title: "Erro de Autenticação", variant: "destructive" });
         return;
     }
     if (!confirm(`Tem certeza que deseja excluir a campanha "${campaignName || campaignId}"?`)) return;
     
-    // setIsLoadingData(true);
     try {
         await axios.delete(`/api/campaigns?id=${campaignId}`, { headers: { Authorization: `Bearer ${token}` } });
         toast({ title: "Excluído", description: `Campanha "${campaignName || campaignId}" foi excluída.`, variant: "destructive" });
-        fetchData();
+        // Se estava na última página e excluiu o último item, pode precisar ajustar currentPage
+        if (campaigns.length === 1 && currentPage > 1) {
+            setCurrentPage(currentPage - 1);
+        } else {
+            fetchData();
+        }
     } catch (error: any) {
         toast({ title: "Erro ao Excluir", description: error.response?.data?.message || error.message || "Falha.", variant: "destructive" });
-        // setIsLoadingData(false);
     }
   };
 
   const handleSort = (columnKey: string) => {
-    if (isLoadingData) return; // Não permitir mudar ordenação enquanto carrega
+    if (isLoadingData) return;
     const newSortOrder = sortBy === columnKey && sortOrder === 'asc' ? 'desc' : 'asc';
     setSortBy(columnKey);
     setSortOrder(newSortOrder);
-    setCurrentPage(1); // Resetar para a primeira página ao mudar ordenação
-    // fetchData será chamado pelo useEffect que observa sortBy, sortOrder
+    setCurrentPage(1);
   };
   
   const renderSortIcon = (columnKey: string) => {
     if (sortBy === columnKey) {
-      return sortOrder === 'asc' ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />;
+      return sortOrder === 'asc' ? <ChevronUp className="h-3 w-3 ml-1 inline-block" /> : <ChevronDown className="h-3 w-3 ml-1 inline-block" />;
     }
-    return null;
+    return <span className="h-3 w-3 ml-1 inline-block"></span>; // Espaço para alinhar
   };
 
 
@@ -280,7 +283,7 @@ export default function CampaignManagerPage() {
                     placeholder="Nome, cliente, plataforma, objetivo..." 
                     className={cn(neumorphicInputStyle, "pl-8 h-8 text-xs")} 
                     value={searchTerm}
-                    onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}} // Resetar página na busca
+                    onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}}
                 />
               </div>
             </div>
@@ -295,8 +298,8 @@ export default function CampaignManagerPage() {
             </div>
             <div>
                 <Label htmlFor="filterClientAccount" className="text-xs text-gray-300 mb-1 block">Conta de Cliente</Label>
-                <Select value={filterClientAccount} onValueChange={(value) => {setFilterClientAccount(value); setCurrentPage(1);}} disabled={availableClientAccounts.length === 0}>
-                    <SelectTrigger id="filterClientAccount" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue /></SelectTrigger>
+                <Select value={filterClientAccount} onValueChange={(value) => {setFilterClientAccount(value); setCurrentPage(1);}} disabled={availableClientAccounts.length === 0 && !isLoadingData}>
+                    <SelectTrigger id="filterClientAccount" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue placeholder={isLoadingData ? "Carregando..." : "Selecione..."} /></SelectTrigger>
                     <SelectContent className={selectContentStyle}>
                         <SelectItem value="all">Todas as Contas</SelectItem>
                         {availableClientAccounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.platform.toUpperCase()})</SelectItem>))}
@@ -313,7 +316,7 @@ export default function CampaignManagerPage() {
           <CardContent className="p-0">
             {isLoadingData && !authLoading ? (
               <div className="flex justify-center items-center py-10"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="ml-2 text-gray-400">Carregando dados...</span></div>
-            ) : campaigns.length === 0 ? ( // Usar campaigns.length aqui, pois filteredCampaigns pode estar vazio devido à busca
+            ) : campaigns.length === 0 ? (
               <p className="text-center text-gray-400 py-10">Nenhuma campanha encontrada com os filtros atuais. {searchTerm && "Tente refinar sua busca ou "}Clique em "Adicionar Campanha".</p>
             ) : (
               <div className="overflow-x-auto">
@@ -330,7 +333,7 @@ export default function CampaignManagerPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {campaigns.map(campaign => ( // Iterar sobre 'campaigns' (dados da API), não 'filteredCampaigns' aqui
+                    {campaigns.map(campaign => (
                       <TableRow key={campaign.id} className="border-b border-[#1E90FF]/5 hover:bg-[#0A0B0F]/50 transition-colors">
                         <TableCell className={cn(tableCellStyle, "font-medium pl-4 truncate")} title={campaign.name}>{campaign.name}</TableCell>
                         <TableCell className={cn(tableCellStyle, "truncate")} title={campaign.clientAccountName}>{campaign.clientAccountName || 'N/A'}</TableCell>
@@ -358,19 +361,21 @@ export default function CampaignManagerPage() {
               </div>
             )}
           </CardContent>
-           {totalPages > 1 && (
-            <CardFooter className="py-3 px-4 border-t border-[#1E90FF]/10 flex items-center justify-end space-x-2">
-                <span className="text-xs text-gray-400">Página {currentPage} de {totalPages} ({totalItems} resultados)</span>
-                <Button
-                    variant="outline" size="sm" className={cn(neumorphicInputStyle, "h-7 px-2 text-xs")}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1 || isLoadingData}
-                > Anterior </Button>
-                <Button
-                    variant="outline" size="sm" className={cn(neumorphicInputStyle, "h-7 px-2 text-xs")}
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages || isLoadingData}
-                > Próxima </Button>
+           {totalPages > 0 && ( // Mostrar paginação apenas se houver páginas
+            <CardFooter className="py-3 px-4 border-t border-[#1E90FF]/10 flex items-center justify-between sm:justify-end space-x-2">
+                <span className="text-xs text-gray-400 hidden sm:inline-block">Página {currentPage} de {totalPages} ({totalItems} resultados)</span>
+                <div className="flex space-x-1">
+                    <Button
+                        variant="outline" size="sm" className={cn(neumorphicInputStyle, "h-7 px-2 text-xs")}
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1 || isLoadingData}
+                    > Anterior </Button>
+                    <Button
+                        variant="outline" size="sm" className={cn(neumorphicInputStyle, "h-7 px-2 text-xs")}
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages || isLoadingData}
+                    > Próxima </Button>
+                </div>
             </CardFooter>
            )}
         </Card>
