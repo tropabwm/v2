@@ -77,24 +77,6 @@ const SIDEBAR_BLUE_NEON = '#5271FF';
 const CHART_LINE_COLOR_1 = SIDEBAR_BLUE_NEON; // Linha principal do gráfico
 const CHART_LINE_COLOR_2 = '#9f7aea'; // Roxo neon para a segunda linha, ou escolha outro azul/cor
 
-// Utility function for safe array operations
-const safeArray = (value, fallback = []) => {
-    return Array.isArray(value) ? value : fallback;
-};
-
-// Debug helper for troubleshooting
-const debugArrayState = (array, label = 'array') => {
-    if (process.env.NODE_ENV === 'development') {
-        console.log(`[DEBUG] ${label}:`, {
-            value: array,
-            type: typeof array,
-            isArray: Array.isArray(array),
-            length: array?.length,
-        });
-    }
-    return array;
-};
-
 const formatMetricValue = (metricKey: string, value: any): string => {
     const numValue = Number(value);
     if (value === undefined || value === null || isNaN(numValue)) return 'N/A';
@@ -111,40 +93,19 @@ const formatMetricValue = (metricKey: string, value: any): string => {
     }
     return numValue.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 };
-
-const formatXAxis = (tickItem: string): string => { 
-    try { 
-        const date = parseISO(tickItem); 
-        return isValid(date) ? format(date, DATE_FORMAT_AXIS, { locale: ptBR }) : ''; 
-    } catch { 
-        return ''; 
-    } 
-};
-
-const formatYAxis = (tickItem: number): string => { 
-    if (tickItem >= 1000000) return `${(tickItem / 1000000).toFixed(1)}M`; 
-    if (tickItem >= 1000) return `${(tickItem / 1000).toFixed(0)}k`; 
-    return tickItem.toLocaleString('pt-BR', { maximumFractionDigits: 0 }); 
-};
-
-const formatTooltipValue = (value: number, name: string): [string] | [string, string] => { 
-    const keyForFormatting = name.toLowerCase().replace(/\s+/g, ''); 
-    return [`${name}: ${formatMetricValue(keyForFormatting, value)}`]; 
-};
+const formatXAxis = (tickItem: string): string => { try { const date = parseISO(tickItem); return isValid(date) ? format(date, DATE_FORMAT_AXIS, { locale: ptBR }) : ''; } catch { return ''; } };
+const formatYAxis = (tickItem: number): string => { if (tickItem >= 1000000) return `${(tickItem / 1000000).toFixed(1)}M`; if (tickItem >= 1000) return `${(tickItem / 1000).toFixed(0)}k`; return tickItem.toLocaleString('pt-BR', { maximumFractionDigits: 0 }); };
+const formatTooltipValue = (value: number, name: string): [string] | [string, string] => { const keyForFormatting = name.toLowerCase().replace(/\s+/g, ''); return [`${name}: ${formatMetricValue(keyForFormatting, value)}`]; };
 
 export default function DashboardPage() {
     const { isAuthenticated, isLoading: authLoading } = useAuth();
     const router = useRouter();
-    
-    // FIXED: Initialize campaigns as empty array to prevent .map() errors
     const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
     const [selectedCampaignId, setSelectedCampaignId] = useState<string>("all");
     const [dateRange, setDateRange] = useState<DateRange | undefined>({
-        from: subDays(new Date(), DEFAULT_TIMEFRAME_DAYS - 1),
+        from: subDays(new Date(), DEFAULT_TIMEFRAME_DAYS -1),
         to: new Date(),
     });
-    
-    // FIXED: Initialize dashboardData with safe structure
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -156,211 +117,43 @@ export default function DashboardPage() {
     const inputStyle = `bg-black/30 border-[${SIDEBAR_BLUE_NEON}]/40 placeholder-gray-400 text-gray-200 focus:ring-2 focus:ring-offset-0 focus:ring-offset-transparent focus:ring-[${SIDEBAR_BLUE_NEON}] focus:border-[${SIDEBAR_BLUE_NEON}] rounded-md transition-all`;
     const buttonStyle = `bg-gradient-to-r from-[${SIDEBAR_BLUE_NEON}] to-[#7c5df0] hover:from-[#7c5df0] hover:to-[${SIDEBAR_BLUE_NEON}] text-white font-semibold rounded-md shadow-md hover:shadow-lg active:scale-95 transition-all`;
 
-    const loadCampaigns = useCallback(async () => { 
-        if (!isAuthenticated) return; 
-        setCampaignsLoading(true); 
-        setApiError(null); 
-        
-        try { 
-            const response = await axios.get<CampaignOption[]>('/api/campaigns?fields=id,name&sort=name:asc'); 
-            
-            // FIXED: Validate API response is an array
-            const campaignData = response.data;
-            if (Array.isArray(campaignData)) {
-                setCampaigns(campaignData);
-                debugArrayState(campaignData, 'campaigns from API');
-            } else {
-                console.warn('API returned non-array campaigns data:', campaignData);
-                setCampaigns([]);
-                setApiError("Formato de dados de campanhas inválido.");
-            }
-        } catch (error) { 
-            const errorMsg = axios.isAxiosError(error) 
-                ? error.response?.data?.message || error.message 
-                : (error as Error).message; 
-            
-            toast({ 
-                title: "Erro Campanhas", 
-                description: errorMsg || "Não foi possível carregar as campanhas.", 
-                variant: "destructive" 
-            }); 
-            
-            // FIXED: Always set campaigns to empty array on error
-            setCampaigns([]); 
-            setApiError("Erro ao carregar campanhas."); 
-        } finally { 
-            setCampaignsLoading(false); 
-        } 
-    }, [toast, isAuthenticated]);
+    const loadCampaigns = useCallback(async () => { if (!isAuthenticated) return; setCampaignsLoading(true); setApiError(null); try { const response = await axios.get<CampaignOption[]>('/api/campaigns?fields=id,name&sort=name:asc'); setCampaigns(response.data || []); } catch (error) { const errorMsg = axios.isAxiosError(error) ? error.response?.data?.message || error.message : (error as Error).message; toast({ title: "Erro Campanhas", description: errorMsg || "Não foi possível carregar as campanhas.", variant: "destructive" }); setCampaigns([]); setApiError("Erro ao carregar campanhas."); } finally { setCampaignsLoading(false); } }, [toast, isAuthenticated]);
+    const loadDashboardData = useCallback(async (isRefresh = false) => { if (!isAuthenticated || !dateRange?.from) return; if (!isRefresh) setLoading(true); else setRefreshing(true); setApiError(null); const startDateStr = format(dateRange.from, DATE_FORMAT_API); const endDate = dateRange.to || dateRange.from; const endDateStr = format(endDate, DATE_FORMAT_API); const campIdToSend = selectedCampaignId === 'all' ? undefined : selectedCampaignId; try { const response = await axios.get<DashboardData>('/api/dashboard', { params: { startDate: startDateStr, endDate: endDateStr, campaignId: campIdToSend } }); const data = response.data; if (data && data.totals && data.dailyData) { setDashboardData(data); if (isRefresh) toast({ title: "Dashboard Atualizado", duration: 2000 }); } else { setDashboardData(null); setApiError("API retornou dados em formato inesperado ou vazios."); toast({ title: "Erro Dashboard", description: "Dados recebidos da API estão incompletos.", variant: "destructive" }); } } catch (error: any) { console.error('[Dashboard] Erro ao carregar dados:', error.response?.data || error.message); const errorMsg = error.response?.data?.details || error.response?.data?.error || error.message || 'Ocorreu um erro desconhecido ao buscar dados.'; setApiError(errorMsg); setDashboardData(null); toast({ title: "Erro Dashboard", description: errorMsg, variant: "destructive" }); } finally { if (!isRefresh) setLoading(false); else setRefreshing(false); } }, [dateRange, selectedCampaignId, toast, isAuthenticated]);
 
-    const loadDashboardData = useCallback(async (isRefresh = false) => { 
-        if (!isAuthenticated || !dateRange?.from) return; 
-        
-        if (!isRefresh) setLoading(true); 
-        else setRefreshing(true); 
-        setApiError(null); 
-        
-        const startDateStr = format(dateRange.from, DATE_FORMAT_API); 
-        const endDate = dateRange.to || dateRange.from; 
-        const endDateStr = format(endDate, DATE_FORMAT_API); 
-        const campIdToSend = selectedCampaignId === 'all' ? undefined : selectedCampaignId; 
-        
-        try { 
-            const response = await axios.get<DashboardData>('/api/dashboard', { 
-                params: { 
-                    startDate: startDateStr, 
-                    endDate: endDateStr, 
-                    campaignId: campIdToSend 
-                } 
-            }); 
-            
-            const data = response.data; 
-            
-            // FIXED: Validate and sanitize dashboard data structure
-            if (data && typeof data === 'object') {
-                const sanitizedData: DashboardData = {
-                    totals: data.totals || {
-                        totalRevenue: 0,
-                        totalClicks: 0,
-                        totalSales: 0,
-                        totalCost: 0,
-                        totalImpressions: 0,
-                        totalBudget: 0,
-                        ctr: null,
-                        cpc: null,
-                        conversionRate: null,
-                        costPerConversion: null,
-                        roi: null,
-                        useBudget: null,
-                        budgetRemaining: null,
-                        realProfit: 0,
-                        realProfitMargin: null,
-                    },
-                    // FIXED: Ensure dailyData is always an array
-                    dailyData: Array.isArray(data.dailyData) ? data.dailyData : [],
-                    totalUsers: data.totalUsers,
-                    userChange: data.userChange,
-                    revenueChange: data.revenueChange,
-                    clickChange: data.clickChange,
-                    salesChange: data.salesChange,
-                    conversionRateChange: data.conversionRateChange,
-                    useBudgetChange: data.useBudgetChange,
-                    roiChange: data.roiChange,
-                    profitChange: data.profitChange,
-                    budgetRemainingChange: data.budgetRemainingChange,
-                };
-                
-                debugArrayState(sanitizedData.dailyData, 'dailyData from API');
-                setDashboardData(sanitizedData); 
-                
-                if (isRefresh) {
-                    toast({ title: "Dashboard Atualizado", duration: 2000 }); 
-                }
-            } else { 
-                setDashboardData(null); 
-                setApiError("API retornou dados em formato inesperado ou vazios."); 
-                toast({ 
-                    title: "Erro Dashboard", 
-                    description: "Dados recebidos da API estão incompletos.", 
-                    variant: "destructive" 
-                }); 
-            } 
-        } catch (error: any) { 
-            console.error('[Dashboard] Erro ao carregar dados:', error.response?.data || error.message); 
-            const errorMsg = error.response?.data?.details 
-                || error.response?.data?.error 
-                || error.message 
-                || 'Ocorreu um erro desconhecido ao buscar dados.'; 
-            
-            setApiError(errorMsg); 
-            setDashboardData(null); 
-            toast({ 
-                title: "Erro Dashboard", 
-                description: errorMsg, 
-                variant: "destructive" 
-            }); 
-        } finally { 
-            if (!isRefresh) setLoading(false); 
-            else setRefreshing(false); 
-        } 
-    }, [dateRange, selectedCampaignId, toast, isAuthenticated]);
-
-    useEffect(() => { 
-        if (!authLoading && !isAuthenticated) {
-            router.push('/login'); 
-        } else if (!authLoading && isAuthenticated) {
-            loadCampaigns(); 
-        }
-    }, [authLoading, isAuthenticated, router, loadCampaigns]);
-
-    useEffect(() => { 
-        if (isAuthenticated && !campaignsLoading && dateRange?.from) { 
-            loadDashboardData(); 
-        } 
-    }, [selectedCampaignId, dateRange, isAuthenticated, campaignsLoading, loadDashboardData]);
+    useEffect(() => { if (!authLoading && !isAuthenticated) router.push('/login'); else if (!authLoading && isAuthenticated) loadCampaigns(); }, [authLoading, isAuthenticated, router, loadCampaigns]);
+    useEffect(() => { if (isAuthenticated && !campaignsLoading && dateRange?.from) { loadDashboardData(); } }, [selectedCampaignId, dateRange, isAuthenticated, campaignsLoading, loadDashboardData]);
 
     const renderRevenueClicksChart = () => {
-        // FIXED: Safe access to dailyData with fallback
-        const data = safeArray(dashboardData?.dailyData, []);
-        debugArrayState(data, 'chart data');
-        
+        const data = dashboardData?.dailyData || [];
         const gridColor = `rgba(${hexToRgbArray(SIDEBAR_BLUE_NEON).join(',')}, 0.1)`;
         const tooltipBg = "rgba(10, 20, 30, 0.9)";
-        const tooltipBorder = `${SIDEBAR_BLUE_NEON}50`;
+        const tooltipBorder = `${SIDEBAR_BLUE_NEON}50`; // Opacidade 50 no hex
+        // textShadow removed as it's not a valid SVG prop for ticks and causes a TypeScript error.
+        // CSS text-shadow is valid for HTML elements (like Legend, Tooltip labels) but not directly for SVG text attributes.
         const axisLabelStyle = { fill: SIDEBAR_BLUE_NEON, fontSize: 10 };
-        const legendStyle = { 
-            color: SIDEBAR_BLUE_NEON, 
-            fontSize: '11px', 
-            paddingTop: '15px', 
-            textShadow: `0 0 2px ${SIDEBAR_BLUE_NEON}80` 
-        };
+        const legendStyle = { color: SIDEBAR_BLUE_NEON, fontSize: '11px', paddingTop: '15px', textShadow: `0 0 2px ${SIDEBAR_BLUE_NEON}80` }; // textShadow is fine for Legend wrapperStyle (HTML)
 
-        if (loading || refreshing) { 
-            return (
-                <div className="flex flex-col items-center justify-center h-[250px]">
-                    <Loader2 className="h-6 w-6 animate-spin" style={{color: SIDEBAR_BLUE_NEON}} />
-                    <span className="text-xs mt-2" style={{color: SIDEBAR_BLUE_NEON, textShadow: `0 0 3px ${SIDEBAR_BLUE_NEON}70`}}>
-                        Carregando gráfico...
-                    </span>
-                </div>
-            ); 
-        }
-        
-        if (!data || data.length === 0) { 
-            return (
-                <div className="flex items-center justify-center h-[250px] text-gray-500 text-sm">
-                    Sem dados para o gráfico.
-                </div>
-            ); 
-        }
-        
+        if (loading || refreshing) { return (<div className="flex flex-col items-center justify-center h-[250px]"><Loader2 className="h-6 w-6 animate-spin" style={{color: SIDEBAR_BLUE_NEON}} /><span className="text-xs mt-2" style={{color: SIDEBAR_BLUE_NEON, textShadow: `0 0 3px ${SIDEBAR_BLUE_NEON}70`}}>Carregando gráfico...</span></div>); }
+        if (!data || data.length === 0) { return <div className="flex items-center justify-center h-[250px] text-gray-500 text-sm">Sem dados para o gráfico.</div>; }
         return (
             <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                     <defs>
                         <filter id="neonGlowLine1" x="-50%" y="-50%" width="200%" height="200%">
-                            <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/> 
-                            <feMerge> 
-                                <feMergeNode in="coloredBlur"/> 
-                                <feMergeNode in="SourceGraphic"/> 
-                            </feMerge>
+                            <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/> <feMerge> <feMergeNode in="coloredBlur"/> <feMergeNode in="SourceGraphic"/> </feMerge>
                         </filter>
-                        <filter id="neonGlowLine2" x="-50%" y="-50%" width="200%" height="200%">
-                            <feComponentTransfer in="SourceAlpha" result="alphaMask">
-                                <feFuncA type="table" tableValues="0 0.6 0.6"/>
-                            </feComponentTransfer>
+                         <filter id="neonGlowLine2" x="-50%" y="-50%" width="200%" height="200%">
+                            <feComponentTransfer in="SourceAlpha" result="alphaMask"><feFuncA type="table" tableValues="0 0.6 0.6"/></feComponentTransfer>
                             <feGaussianBlur in="alphaMask" stdDeviation="2.5" result="blurredAlpha"/>
                             <feFlood floodColor={CHART_LINE_COLOR_2} result="glowColor"/>
                             <feComposite in="glowColor" in2="blurredAlpha" operator="in" result="softGlow_colored"/>
-                            <feMerge>
-                                <feMergeNode in="softGlow_colored"/>
-                                <feMergeNode in="SourceGraphic"/>
-                            </feMerge>
+                            <feMerge><feMergeNode in="softGlow_colored"/><feMergeNode in="SourceGraphic"/></feMerge>
                         </filter>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                     <XAxis dataKey="date" tickFormatter={formatXAxis} tick={axisLabelStyle} axisLine={{ stroke: gridColor }} tickLine={{ stroke: gridColor }} />
                     <YAxis yAxisId="left" tickFormatter={formatYAxis} tick={axisLabelStyle} axisLine={{ stroke: gridColor }} tickLine={{ stroke: gridColor }} />
+                    {/* textShadow removed from tick prop object as it's not a valid SVG prop */}
                     <YAxis yAxisId="right" orientation="right" tickFormatter={formatYAxis} tick={{...axisLabelStyle, fill: CHART_LINE_COLOR_2 }} axisLine={{ stroke: gridColor }} tickLine={{ stroke: gridColor }}/>
                     <Tooltip
                         contentStyle={{ backgroundColor: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: '8px', backdropFilter: 'blur(5px)', boxShadow: `0 4px 30px ${SIDEBAR_BLUE_NEON}20` }}
@@ -382,41 +175,18 @@ export default function DashboardPage() {
         );
     };
 
+    if (authLoading) { return ( <Layout><div className="flex items-center justify-center h-screen w-full"><Loader2 className="h-10 w-10 animate-spin" style={{color: SIDEBAR_BLUE_NEON}} /></div></Layout> ); }
+    if (!isAuthenticated) return null;
+    if (campaignsLoading && campaigns.length === 0 && apiError && !loading) { return ( <Layout><div className="flex flex-col items-center justify-center h-screen w-full text-red-400 text-center p-5"><AlertTriangle className="h-10 w-10 mb-4" /><h2 className="text-lg font-semibold mb-1">Erro ao Carregar Campanhas</h2><p className="text-sm mb-4">{apiError}</p><Button className={cn(buttonStyle, "px-4 h-10")} size="sm" onClick={loadCampaigns}><RefreshCw className="h-4 w-4 mr-2" />Tentar Novamente</Button></div></Layout> ); }
+
+    const cardsLoading = loading || refreshing;
+
     // Função auxiliar para converter HEX para array RGB (para rgba)
     const hexToRgbArray = (hex: string): number[] => {
         const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
         return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [0,0,0];
     };
 
-    if (authLoading) { 
-        return ( 
-            <Layout>
-                <div className="flex items-center justify-center h-screen w-full">
-                    <Loader2 className="h-10 w-10 animate-spin" style={{color: SIDEBAR_BLUE_NEON}} />
-                </div>
-            </Layout> 
-        ); 
-    }
-    
-    if (!isAuthenticated) return null;
-    
-    if (campaignsLoading && campaigns.length === 0 && apiError && !loading) { 
-        return ( 
-            <Layout>
-                <div className="flex flex-col items-center justify-center h-screen w-full text-red-400 text-center p-5">
-                    <AlertTriangle className="h-10 w-10 mb-4" />
-                    <h2 className="text-lg font-semibold mb-1">Erro ao Carregar Campanhas</h2>
-                    <p className="text-sm mb-4">{apiError}</p>
-                    <Button className={cn(buttonStyle, "px-4 h-10")} size="sm" onClick={loadCampaigns}>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Tentar Novamente
-                    </Button>
-                </div>
-            </Layout> 
-        ); 
-    }
-
-    const cardsLoading = loading || refreshing;
 
     return (
         <Layout>
@@ -433,9 +203,7 @@ export default function DashboardPage() {
                         >
                             Visão Geral
                         </h1>
-                        <p className="text-sm text-gray-300" style={{textShadow: `0 0 2px ${SIDEBAR_BLUE_NEON}80`}}>
-                            Métricas chave de suas campanhas.
-                        </p>
+                        <p className="text-sm text-gray-300" style={{textShadow: `0 0 2px ${SIDEBAR_BLUE_NEON}80`}}>Métricas chave de suas campanhas.</p>
                     </div>
                     <div className="flex flex-col sm:flex-row items-center gap-3 mt-4 sm:mt-0">
                         <Popover>
@@ -459,15 +227,8 @@ export default function DashboardPage() {
                                 <SelectValue placeholder={campaignsLoading ? "Carregando..." : "Campanha"} />
                             </SelectTrigger>
                             <SelectContent className="bg-black/80 backdrop-blur-lg border-blue-500/30 text-white rounded-lg shadow-2xl">
-                                <SelectItem value="all" className="text-xs hover:!bg-blue-600/50 focus:!bg-blue-600/50">
-                                    Todas Campanhas
-                                </SelectItem>
-                                {/* FIXED: Safe mapping with array validation */}
-                                {safeArray(campaigns).map((c) => (
-                                    <SelectItem key={c.id} value={c.id} className="text-xs hover:!bg-blue-600/50 focus:!bg-blue-600/50">
-                                        {c.name}
-                                    </SelectItem>
-                                ))}
+                                <SelectItem value="all" className="text-xs hover:!bg-blue-600/50 focus:!bg-blue-600/50">Todas Campanhas</SelectItem>
+                                {campaigns.map((c) => (<SelectItem key={c.id} value={c.id} className="text-xs hover:!bg-blue-600/50 focus:!bg-blue-600/50">{c.name}</SelectItem>))}
                             </SelectContent>
                         </Select>
                         <Button onClick={() => loadDashboardData(true)} className={cn(buttonStyle, "h-10 px-4")} disabled={cardsLoading || campaignsLoading || !dateRange?.from}>
@@ -476,57 +237,44 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {apiError && !cardsLoading && (
-                    <div className="my-4 p-4 bg-red-800/30 border border-red-600/50 rounded-xl text-red-300 text-sm text-center">
-                        <AlertTriangle className="inline-block h-5 w-5 mr-2" />
-                        <strong>Erro:</strong> {apiError}
-                    </div>
-                )}
-                
-                {loading && !refreshing && !apiError && (
-                    <div className="flex-1 flex flex-col items-center justify-center">
-                        <Loader2 className="h-12 w-12 animate-spin" style={{color: SIDEBAR_BLUE_NEON}} />
-                        <p className="mt-3 text-gray-400">Carregando dados...</p>
-                    </div>
-                )}
-                
-                {!loading && !apiError && !dashboardData && (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
-                        <BarChartIcon className="h-16 w-16 mb-4" />
-                        <p>Nenhum dado para exibir.</p>
-                        <p className="text-xs mt-1">Verifique os filtros ou adicione dados de campanha.</p>
-                    </div>
-                )}
+                {apiError && !cardsLoading && (<div className="my-4 p-4 bg-red-800/30 border border-red-600/50 rounded-xl text-red-300 text-sm text-center"><AlertTriangle className="inline-block h-5 w-5 mr-2" /><strong>Erro:</strong> {apiError}</div>)}
+                {loading && !refreshing && !apiError && (<div className="flex-1 flex flex-col items-center justify-center"><Loader2 className="h-12 w-12 animate-spin" style={{color: SIDEBAR_BLUE_NEON}} /><p className="mt-3 text-gray-400">Carregando dados...</p></div>)}
+                {!loading && !apiError && !dashboardData && (<div className="flex-1 flex flex-col items-center justify-center text-gray-500"><BarChartIcon className="h-16 w-16 mb-4" /><p>Nenhum dado para exibir.</p><p className="text-xs mt-1">Verifique os filtros ou adicione dados de campanha.</p></div>)}
 
                 {dashboardData && !apiError && (
                     <div className="space-y-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"> {/* Gap ajustado */}
                             <GlassStatCard label="Receita" value={formatMetricValue('revenue', dashboardData.totals.totalRevenue)} icon={DollarSign} percentageChange={dashboardData.revenueChange} isLoading={cardsLoading} />
                             <GlassStatCard label="Lucro Real" value={formatMetricValue('realProfit', dashboardData.totals.realProfit)} icon={TrendingUp} percentageChange={dashboardData.profitChange} isLoading={cardsLoading} />
                             <GlassStatCard label="Cliques" value={formatMetricValue('clicks', dashboardData.totals.totalClicks)} icon={MousePointerClick} percentageChange={dashboardData.clickChange} isLoading={cardsLoading} />
                             <GlassStatCard label="Vendas" value={formatMetricValue('sales', dashboardData.totals.totalSales)} icon={ShoppingCart} percentageChange={dashboardData.salesChange} isLoading={cardsLoading} />
                             <GlassStatCard label="ROI" value={formatMetricValue('roi', dashboardData.totals.roi)} icon={Percent} percentageChange={dashboardData.roiChange} isLoading={cardsLoading} />
-                            <GlassStatCard label="CPC" value={formatMetricValue('cpc', dashboardData.totals.cpc)} icon={CreditCard} percentageChange={null} isLoading={cardsLoading} />
-                            <GlassStatCard label="CTR" value={formatMetricValue('ctr', dashboardData.totals.ctr)} icon={Activity} percentageChange={null} isLoading={cardsLoading} />
-                            <GlassStatCard label="Taxa de Conversão" value={formatMetricValue('conversionRate', dashboardData.totals.conversionRate)} icon={LineChartIconProp} percentageChange={dashboardData.conversionRateChange} isLoading={cardsLoading} />
-                            <GlassStatCard label="Orçamento Restante" value={formatMetricValue('budgetRemaining', dashboardData.totals.budgetRemaining)} icon={DollarSign} percentageChange={dashboardData.budgetRemainingChange} isLoading={cardsLoading} />
-                            {dashboardData.totalUsers && (
-                            <GlassStatCard label="Usuários Únicos" value={formatMetricValue('users', dashboardData.totalUsers)} icon={Users} percentageChange={dashboardData.userChange} isLoading={cardsLoading} />
-                            )}
+                            <GlassStatCard label="Tx. Conversão" value={formatMetricValue('conversionRate', dashboardData.totals.conversionRate)} icon={Activity} percentageChange={dashboardData.conversionRateChange} isLoading={cardsLoading} />
+                            <GlassStatCard label="Orçamento Gasto" value={formatMetricValue('cost', dashboardData.totals.totalCost)} icon={CreditCard} isLoading={cardsLoading} details={`de ${formatMetricValue('budget', dashboardData.totals.totalBudget)}`} />
+                            <GlassStatCard label="Usuários" value={formatMetricValue('users', dashboardData.totalUsers)} icon={Users} percentageChange={dashboardData.userChange} isLoading={cardsLoading} details="Plataforma" />
                         </div>
 
-                        <Card className={filterCardStyle}>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-lg font-semibold text-white" style={{textShadow: `0 0 5px ${SIDEBAR_BLUE_NEON}80`}}>
-                                    Evolução Diária - Receita vs Cliques
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="pt-0">
-                                {renderRevenueClicksChart()}
-                            </CardContent>
+                        <Card className={cn(filterCardStyle, "overflow-hidden")}>
+                             <div className="p-1 rounded-lg" style={{boxShadow: `0 0 25px -5px ${SIDEBAR_BLUE_NEON}25, inset 0 0 20px ${SIDEBAR_BLUE_NEON}15`}}>
+                                <CardHeader className="pt-5 pb-3 px-5">
+                                    <CardTitle
+                                        className="text-xl font-semibold text-white flex items-center"
+                                        style={{textShadow: `0 0 5px ${SIDEBAR_BLUE_NEON}B0, 0 0 8px ${SIDEBAR_BLUE_NEON}80`}}
+                                    >
+                                        <BarChartIcon className="h-5 w-5 mr-2.5 opacity-80" style={{color: SIDEBAR_BLUE_NEON, filter: `drop-shadow(0 0 3px ${SIDEBAR_BLUE_NEON}90)`}} />
+                                        Performance Detalhada
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="px-3 pb-3">
+                                    {renderRevenueClicksChart()}
+                                </CardContent>
+                            </div>
                         </Card>
                     </div>
                 )}
+                 <div className="mt-auto pt-6 text-xs text-gray-500 text-center">
+                     {!cardsLoading ? `Dados atualizados em: ${format(new Date(), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR })}` : 'Carregando...'}
+                 </div>
             </div>
         </Layout>
     );

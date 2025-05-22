@@ -1,126 +1,46 @@
 // pages/api/campaigns.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getDbPool } from '@/lib/db-mysql';
+import { getDbPool, initializeAllTables } from '@/lib/db-mysql'; // Adicionado initializeAllTables
 import mysql from 'mysql2/promise';
 import crypto from 'crypto';
-import { format, parseISO } from 'date-fns'; // Para formatar datas
 
-// Interface para os dados de entrada do frontend (pode manter camelCase aqui)
-interface CampaignFormData {
+interface CampaignInput {
     name: string;
-    user_id?: number | null;
-    client_name?: string | null; // Adicionado conforme schema
-    product_name?: string | null; // Adicionado conforme schema
-    platforms?: string[] | string | null; // Nome no frontend: platforms
-    objective?: string[] | string | null;
+    platform?: string | string[] | null;
+    objective?: string | string[] | null;
     budget?: number | string | null;
     daily_budget?: number | string | null;
     duration?: number | string | null;
     industry?: string | null;
-    targetAudience?: string | null; // Frontend: targetAudience -> DB: target_audience
-    segmentation?: string | null;   // Frontend: segmentation -> DB: segmentation
-    adFormat?: string[] | string | null; // Frontend: adFormat -> DB: ad_format
-    avgTicket?: number | string | null; // Frontend: avgTicket -> DB: avg_ticket
-    purchaseFrequency?: number | string | null; // Frontend: purchaseFrequency -> DB: purchase_frequency
-    customerLifespan?: number | string | null; // Frontend: customerLifespan -> DB: customer_lifespan
+    targetAudience?: string | null; // Mantido como targetAudience para consistência com usos anteriores
+    segmentation?: string | null;
+    adFormat?: string | string[] | null; // Mantido como adFormat
+    // Campos de métricas/resultados podem ser removidos da INSERÇÃO/ATUALIZAÇÃO manual se forem apenas derivados
+    // revenue?: number | null; 
+    // leads?: number | null;
+    // clicks?: number | null;
+    // sales?: number | null;
+    avgTicket?: number | null;
+    purchaseFrequency?: number | null;
+    customerLifespan?: number | null;
     status?: 'active' | 'paused' | 'completed' | 'draft' | 'archived' | null;
-    startDate?: string | null;
-    endDate?: string | null;
+    startDate?: string | null; // Recebe string, converte para DATE SQL
+    endDate?: string | null;   // Recebe string, converte para DATE SQL
     cost_traffic?: number | string | null;
     cost_creative?: number | string | null;
     cost_operational?: number | string | null;
-    selected_client_account_id?: string | null;
-    external_platform_account_id?: string | null;
-    platform_source?: string | null;
-    external_campaign_id?: string | null;
+    user_id?: number | null; // Adicionado para vincular ao usuário
 }
 
-// Tipo para a resposta da API (campos JSON desserializados)
-interface CampaignResponse extends Omit<CampaignFormData, 'platforms' | 'objective' | 'adFormat'> {
+// Tipo para a resposta da API
+interface CampaignResponse extends CampaignInput {
     id: string;
     created_at: string;
     updated_at: string;
-    platforms?: string[] | null; // Nome na API de resposta (desserializado)
+    // Os campos JSON devem ser desserializados para o frontend
+    platform?: string[] | null;
     objective?: string[] | null;
-    ad_format?: string[] | null; // Nome na API de resposta (desserializado)
-}
-
-// Mapeia nomes de campos do frontend (camelCase) para nomes de colunas do DB (snake_case)
-// Usado para construir a query SQL dinamicamente para INSERT/UPDATE
-const frontendToDbFieldMap: Record<keyof CampaignFormData, string | null> = {
-    name: 'name',
-    user_id: 'user_id',
-    client_name: 'client_name',
-    product_name: 'product_name',
-    platforms: 'platform', // Frontend 'platforms' (plural) mapeia para DB 'platform' (singular, JSON)
-    objective: 'objective',
-    budget: 'budget',
-    daily_budget: 'daily_budget',
-    duration: 'duration',
-    industry: 'industry',
-    targetAudience: 'target_audience', // Correção
-    segmentation: 'segmentation',     // Correção
-    adFormat: 'ad_format',           // Correção
-    avgTicket: 'avg_ticket',         // Correção
-    purchaseFrequency: 'purchase_frequency', // Correção
-    customerLifespan: 'customer_lifespan', // Correção
-    status: 'status',
-    startDate: 'start_date',
-    endDate: 'end_date',
-    cost_traffic: 'cost_traffic',
-    cost_creative: 'cost_creative',
-    cost_operational: 'cost_operational',
-    selected_client_account_id: 'selected_client_account_id',
-    external_platform_account_id: 'external_platform_account_id',
-    platform_source: 'platform_source',
-    external_campaign_id: 'external_campaign_id',
-};
-
-
-// Função para desserializar campos JSON do banco de dados
-function deserializeCampaign(dbCampaign: any): CampaignResponse {
-    const campaign = { ...dbCampaign } as any;
-    try {
-        if (campaign.platform && typeof campaign.platform === 'string') {
-            campaign.platforms = JSON.parse(campaign.platform); // Mapeia db 'platform' para 'platforms' na resposta
-            delete campaign.platform; // Remove o campo original do DB da resposta final, se desejar
-        } else if (Array.isArray(campaign.platform)) {
-            campaign.platforms = campaign.platform; // Já é array
-            delete campaign.platform;
-        } else {
-            campaign.platforms = null;
-        }
-    } catch (e) { console.warn(`[Deserialize] Erro parse platform ID ${campaign.id}: ${e}`); campaign.platforms = null; }
-
-    try {
-        if (campaign.objective && typeof campaign.objective === 'string') {
-            campaign.objective = JSON.parse(campaign.objective);
-        } else if (!Array.isArray(campaign.objective)) {
-             campaign.objective = null;
-        }
-    } catch (e) { console.warn(`[Deserialize] Erro parse objective ID ${campaign.id}: ${e}`); campaign.objective = null; }
-
-    try {
-        if (campaign.ad_format && typeof campaign.ad_format === 'string') { // DB usa ad_format
-            campaign.ad_format = JSON.parse(campaign.ad_format); // Resposta usa ad_format (array)
-        } else if (Array.isArray(campaign.ad_format)) {
-            // já é array
-        }
-         else {
-            campaign.ad_format = null;
-        }
-    } catch (e) { console.warn(`[Deserialize] Erro parse ad_format ID ${campaign.id}: ${e}`); campaign.ad_format = null; }
-    
-    // Mapear snake_case do DB para camelCase do frontend na resposta, se necessário
-    if (campaign.target_audience !== undefined) { campaign.targetAudience = campaign.target_audience; delete campaign.target_audience; }
-    if (campaign.avg_ticket !== undefined) { campaign.avgTicket = campaign.avg_ticket; delete campaign.avg_ticket; }
-    if (campaign.purchase_frequency !== undefined) { campaign.purchaseFrequency = campaign.purchase_frequency; delete campaign.purchase_frequency; }
-    if (campaign.customer_lifespan !== undefined) { campaign.customerLifespan = campaign.customer_lifespan; delete campaign.customer_lifespan; }
-    if (campaign.start_date !== undefined) { campaign.startDate = campaign.start_date; delete campaign.start_date; }
-    if (campaign.end_date !== undefined) { campaign.endDate = campaign.end_date; delete campaign.end_date; }
-
-
-    return campaign as CampaignResponse;
+    adFormat?: string[] | null;
 }
 
 
@@ -130,204 +50,172 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
         const dbPool = getDbPool();
+        // await initializeAllTables(); // Garante que as tabelas existem - CHAME NO _APP OU EM UM INIT GLOBAL
         dbConnection = await dbPool.getConnection();
         console.log(`[API Campaigns ${req.method}] Conexão com DB obtida.`);
 
+
         if (req.method === 'GET') {
-            const { id, fields, limit: limitStr, page: pageStr, sortBy: sortByStr, sortOrder: sortOrderStr, search, status: filterStatus, selectedClientAccountId } = req.query;
-            // const userIdFromAuth = 1; // Substituir pela autenticação real
+            const { id, fields, limit, sort, user_id } = req.query;
 
             if (id && typeof id === 'string') {
                 console.log(`[API Campaigns GET ID] Buscando ID: ${id}`);
-                const [rows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ?', [id]); // AND user_id = ? Adicionar filtro de usuário
+                const [rows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ?', [id]);
                 if (rows.length > 0) {
-                    res.status(200).json(deserializeCampaign(rows[0]));
+                    const campaign = { ...rows[0] } as any;
+                    try { if (campaign.platform && typeof campaign.platform === 'string') campaign.platform = JSON.parse(campaign.platform); } catch (e) { console.warn(`[GET ID ${id}] Erro parse platform: ${e}`); campaign.platform = null; }
+                    try { if (campaign.objective && typeof campaign.objective === 'string') campaign.objective = JSON.parse(campaign.objective); } catch (e) { console.warn(`[GET ID ${id}] Erro parse objective: ${e}`); campaign.objective = null; }
+                    try { if (campaign.adFormat && typeof campaign.adFormat === 'string') campaign.adFormat = JSON.parse(campaign.adFormat); } catch (e) { console.warn(`[GET ID ${id}] Erro parse adFormat: ${e}`); campaign.adFormat = null; }
+                    res.status(200).json(campaign as CampaignResponse);
                 } else {
                     console.log(`[API Campaigns GET ID] Campanha ID ${id} não encontrada.`);
                     res.status(404).json({ message: 'Campanha não encontrada' });
                 }
             } else {
                 console.log("[API Campaigns GET List] Listando campanhas...");
-                // Mapeamento de nomes de campo permitidos para ordenação/seleção para nomes de coluna reais do DB
-                const allowedDbSortFields: Record<string, string> = {
-                    name: 'name',
-                    status: 'status',
-                    created_at: 'created_at',
-                    budget: 'budget',
-                    daily_budget: 'daily_budget',
-                    start_date: 'start_date',
-                    end_date: 'end_date',
-                    selected_client_account_id: 'selected_client_account_id'
-                    // Adicione outros campos permitidos para ordenação
-                };
-
+                const allowedFields = ['id', 'user_id', 'name', 'platform', 'objective', 'budget', 'daily_budget', 'duration', 'industry', 'targetAudience', 'segmentation', 'adFormat', 'avgTicket', 'purchaseFrequency', 'customerLifespan', 'status', 'startDate', 'endDate', 'cost_traffic', 'cost_creative', 'cost_operational', 'created_at', 'updated_at'];
                 let selectFields = '*';
+
                 if (fields && typeof fields === 'string') {
-                    const requestedFields = fields.split(',')
-                        .map(f => f.trim())
-                        .map(f => frontendToDbFieldMap[f as keyof CampaignFormData] || f) // Tenta mapear, senão usa o original
-                        .filter(f => Object.values(frontendToDbFieldMap).includes(f) || ['id', 'created_at', 'updated_at'].includes(f)); // Valida contra colunas do DB
-                    if (requestedFields.length > 0) {
-                        selectFields = requestedFields.map(f => dbConnection!.escapeId(f)).join(', ');
-                    }
+                    const requestedFields = fields.split(',').map(f => f.trim()).filter(f => allowedFields.includes(f));
+                    if (requestedFields.length > 0) { selectFields = requestedFields.map(f => dbConnection!.escapeId(f)).join(', '); }
                 }
 
                 let query = `SELECT ${selectFields} FROM campaigns`;
                 const queryParams: any[] = [];
                 const whereClauses: string[] = [];
 
-                // if (userIdFromAuth) { // Sempre filtrar por usuário logado
-                //     whereClauses.push('user_id = ?');
-                //     queryParams.push(userIdFromAuth);
-                // }
-                if (search && typeof search === 'string') {
-                    whereClauses.push('name LIKE ?');
-                    queryParams.push(`%${search}%`);
+                if (user_id && typeof user_id === 'string') {
+                    whereClauses.push('user_id = ?');
+                    queryParams.push(parseInt(user_id, 10));
                 }
-                if (filterStatus && typeof filterStatus === 'string') {
-                    whereClauses.push('status = ?');
-                    queryParams.push(filterStatus);
-                }
-                if (selectedClientAccountId && typeof selectedClientAccountId === 'string') {
-                    whereClauses.push('selected_client_account_id = ?');
-                    queryParams.push(selectedClientAccountId);
-                }
-
+                // Adicione outros filtros aqui se necessário
 
                 if (whereClauses.length > 0) {
                     query += ` WHERE ${whereClauses.join(' AND ')}`;
                 }
 
-                // Contagem total de itens para paginação (com os mesmos filtros)
-                let countQuery = `SELECT COUNT(*) as totalItems FROM campaigns`;
-                if (whereClauses.length > 0) {
-                    countQuery += ` WHERE ${whereClauses.join(' AND ')}`;
+                if (sort && typeof sort === 'string') {
+                    const [sortField, sortOrder = 'asc'] = sort.split(':');
+                    if (allowedFields.includes(sortField) && ['asc', 'desc'].includes(sortOrder.toLowerCase())) { query += ` ORDER BY ${dbConnection!.escapeId(sortField)} ${sortOrder.toUpperCase()}`; }
+                    else { query += ` ORDER BY created_at DESC`; }
+                } else { query += ` ORDER BY created_at DESC`; }
+
+                const defaultLimit = 50;
+                let limitNum = defaultLimit;
+                if (limit && typeof limit === 'string' && /^\d+$/.test(limit)) {
+                    const requestedLimit = parseInt(limit, 10);
+                    if (requestedLimit > 0) limitNum = requestedLimit;
                 }
-                const [countResult] = await dbConnection.query<mysql.RowDataPacket[]>(countQuery, queryParams);
-                const totalItems = countResult[0]?.totalItems || 0;
-
-
-                const sortBy = typeof sortByStr === 'string' && allowedDbSortFields[sortByStr] ? allowedDbSortFields[sortByStr] : 'created_at';
-                const sortOrder = typeof sortOrderStr === 'string' && ['asc', 'desc'].includes(sortOrderStr.toLowerCase()) ? sortOrderStr.toUpperCase() : 'DESC';
-                query += ` ORDER BY ${dbConnection!.escapeId(sortBy)} ${sortOrder}`;
-                
-                const page = pageStr && parseInt(pageStr as string, 10) > 0 ? parseInt(pageStr as string, 10) : 1;
-                const limit = limitStr && parseInt(limitStr as string, 10) > 0 ? parseInt(limitStr as string, 10) : 10;
-                const offset = (page - 1) * limit;
-                query += ` LIMIT ? OFFSET ?`;
-                queryParams.push(limit, offset);
+                query += ` LIMIT ${limitNum}`;
 
                 console.log(`[API Campaigns GET List] Executing Query: ${query} with params: ${JSON.stringify(queryParams)}`);
                 const [rows] = await dbConnection.query<mysql.RowDataPacket[]>(query, queryParams);
 
-                res.status(200).json({
-                    data: rows.map(deserializeCampaign),
-                    pagination: {
-                        totalItems,
-                        totalPages: Math.ceil(totalItems / limit),
-                        currentPage: page,
-                        itemsPerPage: limit
-                    }
+                const campaigns = rows.map(campaign => {
+                    let tempCampaign = { ...campaign } as any;
+                    try { if (tempCampaign.platform && typeof tempCampaign.platform === 'string') tempCampaign.platform = JSON.parse(tempCampaign.platform); } catch (e) { console.warn(`[GET List] Erro parse platform ID ${tempCampaign.id}: ${e}`); tempCampaign.platform = null;}
+                    try { if (tempCampaign.objective && typeof tempCampaign.objective === 'string') tempCampaign.objective = JSON.parse(tempCampaign.objective); } catch (e) { console.warn(`[GET List] Erro parse objective ID ${tempCampaign.id}: ${e}`); tempCampaign.objective = null;}
+                    try { if (tempCampaign.adFormat && typeof tempCampaign.adFormat === 'string') tempCampaign.adFormat = JSON.parse(tempCampaign.adFormat); } catch (e) { console.warn(`[GET List] Erro parse adFormat ID ${tempCampaign.id}: ${e}`); tempCampaign.adFormat = null;}
+                    return tempCampaign;
                 });
+                res.status(200).json(campaigns as CampaignResponse[]);
             }
         }
         else if (req.method === 'POST') {
             console.log("[API Campaigns POST] Requisição recebida.");
-            const campaignInput: CampaignFormData = req.body;
+            const campaignInput: CampaignInput = req.body;
             console.log("[API Campaigns POST] Dados recebidos no body:", campaignInput);
 
             if (!campaignInput.name || typeof campaignInput.name !== 'string' || campaignInput.name.trim() === '') {
                 console.error("[API Campaigns POST] Erro: Nome ausente ou inválido.");
                 return res.status(400).json({ error: 'Nome da campanha é obrigatório' });
             }
-            // Adicione mais validações aqui (ex: selectedClientAccountId, platforms, objective)
 
-            const newCampaignId = crypto.randomUUID();
-            const dbData: Record<string, any> = { id: newCampaignId };
-            // const userId = 1; // Substituir pela autenticação real
-            // if (userId) dbData.user_id = userId;
+            const id = crypto.randomUUID();
+            const platformJson = (campaignInput.platform && Array.isArray(campaignInput.platform)) ? JSON.stringify(campaignInput.platform) : (typeof campaignInput.platform === 'string' ? campaignInput.platform : null);
+            const objectiveJson = (campaignInput.objective && Array.isArray(campaignInput.objective)) ? JSON.stringify(campaignInput.objective) : (typeof campaignInput.objective === 'string' ? campaignInput.objective : null);
+            const adFormatJson = (campaignInput.adFormat && Array.isArray(campaignInput.adFormat)) ? JSON.stringify(campaignInput.adFormat) : (typeof campaignInput.adFormat === 'string' ? campaignInput.adFormat : null);
 
-            for (const key in campaignInput) {
-                const frontendKey = key as keyof CampaignFormData;
-                const dbKey = frontendToDbFieldMap[frontendKey];
-                if (dbKey && campaignInput[frontendKey] !== undefined) {
-                    let value = campaignInput[frontendKey];
-                    if (['platforms', 'objective', 'adFormat'].includes(frontendKey)) {
-                        value = (value && Array.isArray(value)) ? JSON.stringify(value) : (typeof value === 'string' && value.trim() !== '' ? JSON.stringify([value]) : null);
-                    } else if (['startDate', 'endDate'].includes(frontendKey) && value) {
-                        value = format(parseISO(value as string), 'yyyy-MM-dd');
-                    } else if (value === '') { // Tratar strings vazias como null para campos não textuais
-                        if (!['name', 'industry', 'targetAudience', 'segmentation', 'client_name', 'product_name', 'platform_source', 'external_campaign_id', 'selected_client_account_id', 'external_platform_account_id'].includes(frontendKey)) {
-                            value = null;
-                        }
-                    }
-                    dbData[dbKey] = value;
-                }
-            }
-             if (dbData.status === undefined || dbData.status === null) {
-                dbData.status = 'draft'; // Default status
-            }
+            const sql = `
+                INSERT INTO campaigns (
+                    id, name, user_id, platform, objective, budget, daily_budget, duration, industry,
+                    targetAudience, segmentation, adFormat, avgTicket, purchaseFrequency, customerLifespan, 
+                    status, startDate, endDate, cost_traffic, cost_creative, cost_operational
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `;
+            const params = [
+                id, campaignInput.name.trim(), campaignInput.user_id ?? null,
+                platformJson, objectiveJson,
+                campaignInput.budget != null && String(campaignInput.budget) !== '' ? Number(campaignInput.budget) : null,
+                campaignInput.daily_budget != null && String(campaignInput.daily_budget) !== '' ? Number(campaignInput.daily_budget) : null,
+                campaignInput.duration != null && String(campaignInput.duration) !== '' ? Number(campaignInput.duration) : null,
+                campaignInput.industry ?? null, campaignInput.targetAudience ?? null, campaignInput.segmentation ?? null,
+                adFormatJson,
+                campaignInput.avgTicket ?? null, campaignInput.purchaseFrequency ?? null, campaignInput.customerLifespan ?? null,
+                campaignInput.status ?? 'draft',
+                campaignInput.startDate ? new Date(campaignInput.startDate).toISOString().slice(0, 10) : null,
+                campaignInput.endDate ? new Date(campaignInput.endDate).toISOString().slice(0, 10) : null,
+                campaignInput.cost_traffic != null && String(campaignInput.cost_traffic) !== '' ? Number(campaignInput.cost_traffic) : 0.00,
+                campaignInput.cost_creative != null && String(campaignInput.cost_creative) !== '' ? Number(campaignInput.cost_creative) : 0.00,
+                campaignInput.cost_operational != null && String(campaignInput.cost_operational) !== '' ? Number(campaignInput.cost_operational) : 0.00
+            ];
 
+            console.log("[API Campaigns POST] SQL Query:", sql.substring(0, 300) + "...");
+            console.log("[API Campaigns POST] Params:", JSON.stringify(params).substring(0,300) + "...");
 
-            const fields = Object.keys(dbData);
-            const placeholders = fields.map(() => '?').join(', ');
-            const values = Object.values(dbData);
+            await dbConnection.query(sql, params);
+            console.log("[API Campaigns POST] INSERT executado com sucesso. ID:", id);
 
-            const sql = `INSERT INTO campaigns (${fields.map(f => dbConnection!.escapeId(f)).join(', ')}) VALUES (${placeholders})`;
-            
-            console.log("[API Campaigns POST] SQL Query:", sql.substring(0, 500) + "...");
-            console.log("[API Campaigns POST] Params:", JSON.stringify(values).substring(0,500) + "...");
-
-            await dbConnection.query(sql, values);
-            console.log("[API Campaigns POST] INSERT executado com sucesso. ID:", newCampaignId);
-
-            const [newCampaignRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ?', [newCampaignId]);
+            const [newCampaignRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ?', [id]);
             if (newCampaignRows.length > 0) {
-                res.status(201).json(deserializeCampaign(newCampaignRows[0]));
+                const newCampaign = { ...newCampaignRows[0] } as any;
+                try { if (newCampaign.platform && typeof newCampaign.platform === 'string') newCampaign.platform = JSON.parse(newCampaign.platform); } catch(e){}
+                try { if (newCampaign.objective && typeof newCampaign.objective === 'string') newCampaign.objective = JSON.parse(newCampaign.objective); } catch(e){}
+                try { if (newCampaign.adFormat && typeof newCampaign.adFormat === 'string') newCampaign.adFormat = JSON.parse(newCampaign.adFormat); } catch(e){}
+                res.status(201).json(newCampaign as CampaignResponse);
             } else {
                 res.status(500).json({ message: "Erro ao buscar campanha recém-criada" });
             }
         }
         else if (req.method === 'PUT') {
             const { id } = req.query;
-            const campaignInput: Partial<CampaignFormData> = req.body;
-            // const userId = 1; // Substituir pela autenticação real
+            const updateData: Partial<CampaignInput> = req.body;
 
             if (!id || typeof id !== 'string') {
                 return res.status(400).json({ message: 'ID da campanha é obrigatório na query string' });
             }
-            if (Object.keys(campaignInput).length === 0) {
+            if (Object.keys(updateData).length === 0) {
                 return res.status(400).json({ message: 'Nenhum campo fornecido para atualização.' });
             }
             
-            const dbDataToUpdate: Record<string, any> = {};
-            for (const key in campaignInput) {
-                const frontendKey = key as keyof CampaignFormData;
-                const dbKey = frontendToDbFieldMap[frontendKey];
-                 if (dbKey && campaignInput[frontendKey] !== undefined) { // Permitir `null` para limpar campos
-                    let value = campaignInput[frontendKey];
-                    if (['platforms', 'objective', 'adFormat'].includes(frontendKey)) {
-                        value = (value && Array.isArray(value) && value.length > 0) ? JSON.stringify(value) : 
-                                (typeof value === 'string' && value.trim() !== '' ? JSON.stringify([value]) : null);
-                    } else if (['startDate', 'endDate'].includes(frontendKey)) {
-                        value = value ? format(parseISO(value as string), 'yyyy-MM-dd') : null;
-                    } else if (value === '') {
-                         if (!['name', 'industry', 'targetAudience', 'segmentation', 'client_name', 'product_name', 'platform_source', 'external_campaign_id', 'selected_client_account_id', 'external_platform_account_id'].includes(frontendKey)) {
-                            value = null;
-                        }
-                    }
-                    dbDataToUpdate[dbKey] = value;
-                }
-            }
+            const fieldsToUpdate: string[] = [];
+            const params: any[] = [];
 
-            if (Object.keys(dbDataToUpdate).length === 0) {
+            Object.entries(updateData).forEach(([key, value]) => {
+                if (value !== undefined && ['name', 'platform', 'objective', 'budget', 'daily_budget', 'duration', 'industry', 'targetAudience', 'segmentation', 'adFormat', 'avgTicket', 'purchaseFrequency', 'customerLifespan', 'status', 'startDate', 'endDate', 'cost_traffic', 'cost_creative', 'cost_operational', 'user_id'].includes(key)) {
+                    fieldsToUpdate.push(`${dbConnection!.escapeId(key)} = ?`);
+                    if (['platform', 'objective', 'adFormat'].includes(key)) {
+                        params.push((value && Array.isArray(value)) ? JSON.stringify(value) : (typeof value === 'string' ? value : null));
+                    } else if (['startDate', 'endDate'].includes(key) && value) {
+                        params.push(new Date(value as string).toISOString().slice(0, 10));
+                    } else if (value === null || String(value).trim() === '') {
+                         params.push(null);
+                    } else if (typeof value === 'string' && ['budget', 'daily_budget', 'duration', 'avgTicket', 'purchaseFrequency', 'customerLifespan', 'cost_traffic', 'cost_creative', 'cost_operational'].includes(key)) {
+                        params.push(Number(value));
+                    }
+                     else {
+                        params.push(value);
+                    }
+                }
+            });
+
+            if (fieldsToUpdate.length === 0) {
                 return res.status(400).json({ message: 'Nenhum campo válido para atualização.' });
             }
 
-            const setClauses = Object.keys(dbDataToUpdate).map(key => `${dbConnection!.escapeId(key)} = ?`).join(', ');
-            const params = [...Object.values(dbDataToUpdate), id]; // Adicionar userId no WHERE: , userId
-
-            const sql = `UPDATE campaigns SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`; // AND user_id = ?
+            params.push(id);
+            const sql = `UPDATE campaigns SET ${fieldsToUpdate.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
             console.log("[API Campaigns PUT] SQL Query:", sql.substring(0,300) + "...");
             console.log("[API Campaigns PUT] Params:", JSON.stringify(params).substring(0,300) + "...");
 
@@ -338,30 +226,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 if (checkRows.length === 0) {
                     return res.status(404).json({ message: 'Campanha não encontrada para atualização.' });
                 }
-                 // Se encontrou mas não afetou, pode ser que os dados sejam os mesmos ou filtro de user_id impediu
-                console.warn(`[API Campaigns PUT] Nenhuma linha afetada para ID ${id}, mas a campanha existe.`);
             }
 
             const [updatedCampaignRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM campaigns WHERE id = ?', [id]);
              if (updatedCampaignRows.length > 0) {
-                res.status(200).json(deserializeCampaign(updatedCampaignRows[0]));
+                const updatedCampaign = { ...updatedCampaignRows[0] } as any;
+                try { if (updatedCampaign.platform && typeof updatedCampaign.platform === 'string') updatedCampaign.platform = JSON.parse(updatedCampaign.platform); } catch(e){}
+                try { if (updatedCampaign.objective && typeof updatedCampaign.objective === 'string') updatedCampaign.objective = JSON.parse(updatedCampaign.objective); } catch(e){}
+                try { if (updatedCampaign.adFormat && typeof updatedCampaign.adFormat === 'string') updatedCampaign.adFormat = JSON.parse(updatedCampaign.adFormat); } catch(e){}
+                res.status(200).json(updatedCampaign as CampaignResponse);
             } else {
-                res.status(404).json({ message: 'Campanha não encontrada após atualização.' });
+                res.status(404).json({ message: 'Campanha não encontrada após atualização (inesperado).' });
             }
         }
         else if (req.method === 'DELETE') {
             const { id } = req.query;
-            // const userId = 1; // Substituir pela autenticação real
             if (!id || typeof id !== 'string') {
                 return res.status(400).json({ message: 'ID da campanha é obrigatório na query string.' });
             }
             console.log(`[API Campaigns DELETE] Tentando deletar ID: ${id}`);
-            
-            // As FKs na sua DB estão ON DELETE SET NULL ou ON DELETE CASCADE para a maioria,
-            // então não precisa deletar manualmente de creatives, copies, alerts, daily_metrics, flows.
-            // Verifique `fk_alerts_user_id` e `fk_mcp_saved_user_id` que são ON DELETE CASCADE se o user for deletado.
+            // Adicionar aqui a deleção de registros dependentes (ex: daily_metrics, copies) ANTES de deletar a campanha, se a FK não for ON DELETE CASCADE
+            // await dbConnection.query('DELETE FROM daily_metrics WHERE campaign_id = ?', [id]);
+            // await dbConnection.query('DELETE FROM copies WHERE campaign_id = ?', [id]);
+            // ... e outras tabelas ...
 
-            const [result] = await dbConnection.query<mysql.ResultSetHeader>('DELETE FROM campaigns WHERE id = ?', [id]); // AND user_id = ?
+            const [result] = await dbConnection.query<mysql.ResultSetHeader>('DELETE FROM campaigns WHERE id = ?', [id]);
             if (result.affectedRows === 0) {
                 return res.status(404).json({ message: 'Campanha não encontrada para exclusão.' });
             }
@@ -374,7 +263,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     } catch (err: any) {
         console.error(`[API Campaigns ${req?.method || 'Unknown'}] Erro GERAL no try/catch:`, err.message, err.stack, err.code, err.sqlMessage);
-        res.status(500).json({ message: 'Erro interno do servidor', error: err?.message ?? 'Erro desconhecido', code: err.code, sqlMessage: err.sqlMessage });
+        res.status(500).json({ message: 'Erro interno do servidor', error: err?.message ?? 'Erro desconhecido', code: err.code });
     } finally {
         if (dbConnection) {
             dbConnection.release();
