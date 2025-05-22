@@ -102,15 +102,15 @@ export default function CampaignManagerPage() {
   const selectContentStyle = "bg-[#1e2128] border-[#1E90FF]/30 text-white";
 
   const fetchClientAccounts = useCallback(async () => {
-    console.log("[ClientAccounts] Fetching... Token:", token ? 'present' : 'absent');
+    // console.log("[ClientAccounts] Fetching... Token:", token ? 'present' : 'absent'); // DEBUG
     if (!token) return;
     try {
       const response = await axios.get<ClientAccountOption[]>('/api/client-accounts', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      console.log('[ClientAccounts] API Response:', response); 
-      console.log('[ClientAccounts] response.data:', response.data); 
-      console.log('[ClientAccounts] Is response.data an array?:', Array.isArray(response.data)); 
+      // console.log('[ClientAccounts] API Response:', response); // DEBUG
+      // console.log('[ClientAccounts] response.data:', response.data); // DEBUG
+      // console.log('[ClientAccounts] Is response.data an array?:', Array.isArray(response.data)); // DEBUG
       setAvailableClientAccounts(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error("Erro ao buscar contas de clientes:", error);
@@ -120,31 +120,30 @@ export default function CampaignManagerPage() {
   }, [token, toast]);
 
   const fetchData = useCallback(async () => {
-    console.log("[Campaigns] FetchData called. Token:", token ? 'present' : 'absent');
+    // console.log("[Campaigns] FetchData called. Token:", token ? 'present' : 'absent'); // DEBUG
     if (!token) {
       setIsLoadingData(false);
-      console.log("[Campaigns] No token, aborting fetchData.");
+      // console.log("[Campaigns] No token, aborting fetchData."); // DEBUG
       return;
     }
     setIsLoadingData(true);
     
     let currentClientAccounts = availableClientAccounts;
     if (currentClientAccounts.length === 0 && token) {
-        console.log("[Campaigns] availableClientAccounts is empty, attempting to fetch them within fetchData.");
+        // console.log("[Campaigns] availableClientAccounts is empty, attempting to fetch them within fetchData."); // DEBUG
         try {
             const clientAccountsResponse = await axios.get<ClientAccountOption[]>('/api/client-accounts', { headers: { Authorization: `Bearer ${token}` }});
-            console.log('[Campaigns] Inner fetchClientAccounts Response.data:', clientAccountsResponse.data); 
+            // console.log('[Campaigns] Inner fetchClientAccounts Response.data:', clientAccountsResponse.data); // DEBUG
             currentClientAccounts = Array.isArray(clientAccountsResponse.data) ? clientAccountsResponse.data : [];
-            if(availableClientAccounts.length === 0 && currentClientAccounts.length > 0) { // Só atualiza se o estado global ainda estava vazio
+            if(availableClientAccounts.length === 0 && currentClientAccounts.length > 0) {
                  setAvailableClientAccounts(currentClientAccounts);
             }
         } catch (error) {
             console.error("Erro ao buscar contas de clientes dentro de fetchData:", error);
-            currentClientAccounts = []; // Garante que é um array para o mapeamento
+            currentClientAccounts = [];
         }
     }
-    console.log("[Campaigns] Using client accounts for mapping (before API call):", currentClientAccounts, Array.isArray(currentClientAccounts));
-
+    // console.log("[Campaigns] Using client accounts for mapping (before API call):", currentClientAccounts, Array.isArray(currentClientAccounts)); // DEBUG
 
     try {
       const params = new URLSearchParams();
@@ -156,19 +155,18 @@ export default function CampaignManagerPage() {
       params.append('sortBy', sortBy);
       params.append('sortOrder', sortOrder);
 
-      console.log(`[Campaigns] Fetching /api/campaigns with params: ${params.toString()}`);
+      // console.log(`[Campaigns] Fetching /api/campaigns with params: ${params.toString()}`); // DEBUG
       const response = await axios.get<PaginatedApiResponse<CampaignFormData>>(`/api/campaigns?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      console.log('[Campaigns] API /api/campaigns Full Response:', response); 
-      console.log('[Campaigns] API /api/campaigns response.data:', response.data); 
+      // console.log('[Campaigns] API /api/campaigns Full Response:', response); // DEBUG
+      // console.log('[Campaigns] API /api/campaigns response.data:', response.data); // DEBUG
       
       if (response.data && response.data.pagination && Array.isArray(response.data.data)) {
-        console.log('[Campaigns] response.data.data IS an array. Length:', response.data.data.length); 
+        // console.log('[Campaigns] response.data.data IS an array. Length:', response.data.data.length); // DEBUG
         const campaignsFromApi = response.data.data;
         
-        // Garante que currentClientAccounts é um array para o .find
         const finalClientAccountsForMap = Array.isArray(currentClientAccounts) ? currentClientAccounts : [];
 
         const mappedCampaigns = campaignsFromApi.map(c => ({
@@ -195,7 +193,7 @@ export default function CampaignManagerPage() {
       setTotalPages(0);
     } finally {
       setIsLoadingData(false);
-      console.log("[Campaigns] FetchData finished.");
+      // console.log("[Campaigns] FetchData finished."); // DEBUG
     }
   }, [token, toast, filterStatus, filterClientAccount, searchTerm, currentPage, itemsPerPage, sortBy, sortOrder, availableClientAccounts]);
 
@@ -212,8 +210,8 @@ export default function CampaignManagerPage() {
     if (token) { 
         fetchData();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm, token]); // Removido fetchData daqui, pois suas dependências já estão listadas e fetchData em si é useCallback
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm, token]);
 
 
   const handleOpenForm = (campaign?: CampaignListItem) => {
@@ -259,7 +257,7 @@ export default function CampaignManagerPage() {
     try {
         await axios.delete(`/api/campaigns?id=${campaignId}`, { headers: { Authorization: `Bearer ${token}` } });
         toast({ title: "Excluído", description: `Campanha "${campaignName || campaignId}" foi excluída.`, variant: "destructive" });
-        if (campaigns.length === 1 && currentPage > 1 && totalItems > 1) { // Evitar página negativa se for o último item geral
+        if (campaigns.length === 1 && currentPage > 1 && totalItems > 1) { 
             setCurrentPage(currentPage - 1);
         } else {
             fetchData();
@@ -331,7 +329,7 @@ export default function CampaignManagerPage() {
                     <SelectTrigger id="filterClientAccount" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue placeholder={isLoadingData && availableClientAccounts.length === 0 ? "Carregando..." : "Selecione..."} /></SelectTrigger>
                     <SelectContent className={selectContentStyle}>
                         <SelectItem value="all">Todas as Contas</SelectItem>
-                        {console.log('[Render] availableClientAccounts for Select:', availableClientAccounts, Array.isArray(availableClientAccounts))}
+                        {/* Removido console.log daqui */}
                         {Array.isArray(availableClientAccounts) && availableClientAccounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.platform.toUpperCase()})</SelectItem>))}
                     </SelectContent>
                 </Select>
@@ -350,7 +348,7 @@ export default function CampaignManagerPage() {
               <p className="text-center text-gray-400 py-10">Nenhuma campanha encontrada com os filtros atuais. {searchTerm && "Tente refinar sua busca ou "}Clique em "Adicionar Campanha".</p>
             ) : (
               <div className="overflow-x-auto">
-                {console.log('[Render] Campaigns before table map:', campaigns, Array.isArray(campaigns))}
+                {/* Removido console.log daqui */}
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-[#1E90FF]/10 hover:bg-transparent">
@@ -414,7 +412,7 @@ export default function CampaignManagerPage() {
 
       {isFormOpen && (
         <>
-         {console.log('[Render] availableClientAccounts for form:', availableClientAccounts, Array.isArray(availableClientAccounts))}
+         {/* Removido console.log daqui */}
          <CampaignManagerForm
           isOpen={isFormOpen}
           onClose={handleCloseForm}
