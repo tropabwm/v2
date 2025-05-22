@@ -1,389 +1,455 @@
 // pages/campaign-manager.tsx
+"use client";
+
 import React, { useState, useEffect, useCallback } from 'react';
-import Head from 'next/head';
 import Layout from '@/components/layout';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from '@/components/ui/use-toast';
-import { cn } from "@/lib/utils";
-import { PlusCircle, ListFilter, Search, Edit, Trash2, MoreHorizontal, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { MoreHorizontal, PlusCircle, Search, ChevronUp, ChevronDown, Filter } from 'lucide-react';
 import CampaignManagerForm, { CampaignFormData, ClientAccountOption } from '@/components/CampaignManagerForm';
 import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'next/router';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
 import axios from 'axios';
-import { format as formatDateFns, parseISO, isValid as isValidDate } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { useToast } from '@/components/ui/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
-interface CampaignListItem extends CampaignFormData {
+
+// Tipos para os dados da API de campanhas
+interface CampaignResponse {
   id: string;
-  clientAccountName?: string;
-  platformText?: string;
-  objectiveText?: string;
+  name: string;
+  status: string;
+  selectedClientAccountId: string;
+  selectedClientAccountName?: string; // Adicionado para exibição no frontend
+  platform: string[];
+  objective: string[];
+  ad_format: string[];
+  daily_budget: number;
+  budget: number;
+  start_date: string;
+  end_date: string;
+  target_audience_description: string;
+  industry: string;
+  segmentation_notes: string;
+  avg_ticket: number;
+  external_campaign_id: string;
+  platform_source: string;
+  external_platform_account_id: string;
+  client_name?: string; // Para a tabela, se vier do DB
+  product_name?: string; // Para a tabela, se vier do DB
 }
 
-interface PaginatedApiResponse<T> {
-  data: T[];
+interface CampaignListItem {
+  id: string;
+  name: string;
+  clientName: string; // Nome da conta do cliente
+  platform: string; // Ex: Google Ads, Meta Ads
+  objective: string; // Ex: Vendas, Leads
+  status: string;
+  dailyBudget: number;
+}
+
+interface CampaignApiResponse {
+  data: CampaignResponse[];
   pagination: {
+    currentPage: number;
+    itemsPerPage: number;
     totalItems: number;
     totalPages: number;
-    currentPage: number;
-    pageSize: number;
   };
 }
 
-const STATUS_OPTIONS_FILTER = [
-    { value: 'all', label: 'Todos Status' },
-    { value: 'draft', label: 'Rascunho' },
-    { value: 'active', label: 'Ativa' },
-    { value: 'paused', label: 'Pausada' },
-    { value: 'completed', label: 'Concluída' },
-    { value: 'archived', label: 'Arquivada' }
-];
-
-const formatDate = (dateInput: Date | string | null | undefined): string => {
-  if (!dateInput) return 'N/A';
-  const date = typeof dateInput === 'string' ? parseISO(dateInput) : dateInput;
-  if (!isValidDate(date)) return 'N/A'; 
-  return formatDateFns(date, 'dd/MM/yy', { locale: ptBR });
-};
-
-const formatCurrency = (value?: number | string | null): string => {
-    if (value === null || value === undefined || String(value).trim() === '') return 'N/A';
-    const num = Number(value);
-    if (isNaN(num)) return 'N/A';
-    return `R$ ${num.toFixed(2).replace('.', ',')}`;
-}
-
-export default function CampaignManagerPage() {
-  const { isAuthenticated, isLoading: authLoading, token } = useAuth();
-  const router = useRouter();
+const CampaignManagerPage: React.FC = () => {
+  const { isAuthenticated, token, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingCampaign, setEditingCampaign] = useState<Partial<CampaignFormData> | null>(null);
-  
+
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
-  const [isLoadingData, setIsLoadingData] = useState(true);
   const [availableClientAccounts, setAvailableClientAccounts] = useState<ClientAccountOption[]>([]);
-  
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingCampaignData, setEditingCampaignData] = useState<CampaignFormData | null>(null);
+
+  // Estados para filtros e paginação
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterClientAccount, setFilterClientAccount] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterClientAccount, setFilterClientAccount] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalPages, setTotalPages] = useState(0);
+  const [itemsPerPage, setItemsPerPage] = useState(10); // Pode ser ajustado ou selecionável
   const [totalItems, setTotalItems] = useState(0);
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState('desc');
+  const [totalPages, setTotalPages] = useState(0);
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  const neonColor = '#1E90FF';
-  const primaryButtonStyle = `bg-gradient-to-r from-[${neonColor}] to-[#4682B4] hover:from-[#4682B4] hover:to-[${neonColor}] text-white font-semibold shadow-[0_4px_10px_rgba(30,144,255,0.4)]`;
-  const cardStyle = "bg-[#141414]/80 backdrop-blur-sm shadow-[5px_5px_10px_rgba(0,0,0,0.4),-5px_-5px_10px_rgba(255,255,255,0.05)] rounded-lg border-none";
-  const neumorphicInputStyle = "bg-[#141414] text-white shadow-[inset_2px_2px_4px_rgba(0,0,0,0.3),inset_-2px_-2px_4px_rgba(255,255,255,0.05)] placeholder:text-gray-500 border-none focus:ring-2 focus:ring-[#1E90FF] focus:ring-offset-2 focus:ring-offset-[#0e1015] h-9";
-  const tableHeaderStyle = "text-xs font-semibold text-gray-400 uppercase tracking-wider";
-  const tableCellStyle = "text-sm text-gray-200 py-2.5";
-  const statusBadgeColors: { [key: string]: string } = {
-    draft: 'bg-gray-500/80 border-gray-400/50 text-gray-100',
-    active: 'bg-green-500/80 border-green-400/50 text-green-50 shadow-[0_0_4px_#32CD32]',
-    paused: 'bg-yellow-500/80 border-yellow-400/50 text-yellow-50',
-    completed: 'bg-blue-500/80 border-blue-400/50 text-blue-50',
-    archived: 'bg-slate-600/80 border-slate-500/50 text-slate-300',
-  };
-  const selectContentStyle = "bg-[#1e2128] border-[#1E90FF]/30 text-white";
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+  // Função para buscar contas de clientes
   const fetchClientAccounts = useCallback(async () => {
-    console.log("[ClientAccounts] Fetching... Token:", token ? 'present' : 'absent');
     if (!token) return;
     try {
-      const response = await axios.get<ClientAccountOption[]>('/api/client-accounts', {
+      const response = await axios.get<ClientAccountOption[]>(`${API_URL}/api/client-accounts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      console.log('[ClientAccounts] API Response:', response); 
-      console.log('[ClientAccounts] response.data:', response.data); 
-      console.log('[ClientAccounts] Is response.data an array?:', Array.isArray(response.data)); 
-      setAvailableClientAccounts(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error("Erro ao buscar contas de clientes:", error);
-      toast({ title: "Erro", description: "Falha ao carregar contas de clientes.", variant: "destructive" });
-      setAvailableClientAccounts([]);
-    }
-  }, [token, toast]);
-
-  const fetchData = useCallback(async () => {
-    console.log("[Campaigns] FetchData called. Token:", token ? 'present' : 'absent');
-    if (!token) {
-      setIsLoadingData(false);
-      console.log("[Campaigns] No token, aborting fetchData.");
-      return;
-    }
-    setIsLoadingData(true);
-    
-    let currentClientAccounts = availableClientAccounts;
-    if ((!Array.isArray(currentClientAccounts) || currentClientAccounts.length === 0) && token) { // Adicionada verificação Array.isArray
-        console.log("[Campaigns] availableClientAccounts is empty or not an array, attempting to fetch them within fetchData.");
-        try {
-            const clientAccountsResponse = await axios.get<ClientAccountOption[]>('/api/client-accounts', { headers: { Authorization: `Bearer ${token}` }});
-            console.log('[Campaigns] Inner fetchClientAccounts Response.data:', clientAccountsResponse.data); 
-            currentClientAccounts = Array.isArray(clientAccountsResponse.data) ? clientAccountsResponse.data : [];
-            if((!Array.isArray(availableClientAccounts) || availableClientAccounts.length === 0) && currentClientAccounts.length > 0) {
-                 setAvailableClientAccounts(currentClientAccounts);
-            }
-        } catch (error) {
-            console.error("Erro ao buscar contas de clientes dentro de fetchData:", error);
-            currentClientAccounts = [];
-        }
-    }
-    console.log("[Campaigns] Using client accounts for mapping (before API call):", currentClientAccounts, Array.isArray(currentClientAccounts));
-
-    try {
-      const params = new URLSearchParams();
-      if (filterStatus !== 'all') params.append('status', filterStatus);
-      if (filterClientAccount !== 'all') params.append('selectedClientAccountId', filterClientAccount);
-      if (searchTerm.trim()) params.append('search', searchTerm.trim());
-      params.append('page', String(currentPage));
-      params.append('limit', String(itemsPerPage));
-      params.append('sortBy', sortBy);
-      params.append('sortOrder', sortOrder);
-
-      console.log(`[Campaigns] Fetching /api/campaigns with params: ${params.toString()}`);
-      const response = await axios.get<PaginatedApiResponse<CampaignFormData>>(`/api/campaigns?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      
-      console.log('[Campaigns] API /api/campaigns Full Response:', response); 
-      console.log('[Campaigns] API /api/campaigns response.data:', response.data); 
-      
-      if (response.data && response.data.pagination && Array.isArray(response.data.data)) {
-        console.log('[Campaigns] response.data.data IS an array. Length:', response.data.data.length); 
-        const campaignsFromApi = response.data.data;
-        
-        const finalClientAccountsForMap = Array.isArray(currentClientAccounts) ? currentClientAccounts : [];
-
-        const mappedCampaigns = campaignsFromApi.map(c => {
-          // console.log('[Campaigns Map] Processing campaign object c:', c); 
-          if (!c || typeof c.id === 'undefined') { 
-              console.error('[Campaigns Map] Invalid campaign object:', c);
-              return null; 
-          }
-          return {
-            ...c,
-            id: c.id!,
-            clientAccountName: finalClientAccountsForMap.find(acc => acc.id === c.selectedClientAccountId)?.name || 'N/A',
-            platformText: Array.isArray(c.platform) ? c.platform.join(', ') : (typeof c.platform === 'string' ? c.platform : 'N/A'),
-            objectiveText: Array.isArray(c.objective) ? c.objective.join(', ') : (typeof c.objective === 'string' ? c.objective : 'N/A'),
-          };
-        }).filter(item => item !== null);
-        setCampaigns(mappedCampaigns as CampaignListItem[]);
-        setTotalItems(response.data.pagination.totalItems);
-        setTotalPages(response.data.pagination.totalPages);
+      console.log('[CampaignManager] Contas de cliente carregadas:', response.data); // Log para inspecionar
+      // **VERIFICAÇÃO CRÍTICA AQUI**
+      if (Array.isArray(response.data)) {
+        setAvailableClientAccounts(response.data);
       } else {
-        console.error('[Campaigns] Estrutura inesperada da API /api/campaigns ou response.data.data não é array:', response.data);
-        setCampaigns([]); setTotalItems(0); setTotalPages(0);
+        console.error('[CampaignManager] Resposta inesperada para client-accounts:', response.data);
+        setAvailableClientAccounts([]); // Garante que seja um array
       }
-    } catch (error: any) {
-      console.error("Erro ao buscar dados das campanhas:", error.response?.data || error.message);
-      toast({ title: "Erro de Carregamento", description: "Falha ao carregar campanhas.", variant: "destructive" });
-      setCampaigns([]); setTotalItems(0); setTotalPages(0);
+    } catch (error) {
+      console.error('Erro ao carregar contas de cliente:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar as contas de cliente.',
+        variant: 'destructive',
+      });
+      setAvailableClientAccounts([]); // Garante que seja um array em caso de erro
+    }
+  }, [token, toast, API_URL]);
+
+  // Função para buscar dados das campanhas
+  const fetchData = useCallback(async () => {
+    if (!token) return;
+
+    setIsLoadingData(true);
+    try {
+      const response = await axios.get<CampaignApiResponse>(`${API_URL}/api/campaigns`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          sortBy: sortBy,
+          sortOrder: sortOrder,
+          search: searchTerm,
+          status: filterStatus,
+          selectedClientAccountId: filterClientAccount,
+        },
+      });
+
+      console.log('[CampaignManager] Resposta da API /api/campaigns:', response.data); // Log para inspecionar
+
+      // **VERIFICAÇÃO CRÍTICA AQUI**
+      if (response.data && Array.isArray(response.data.data)) {
+        const mappedCampaigns: CampaignListItem[] = response.data.data.map((campaign: CampaignResponse) => {
+          // Encontrar o nome da conta do cliente correspondente
+          const clientAccount = availableClientAccounts.find(acc => acc.id === campaign.selectedClientAccountId);
+          const clientName = clientAccount ? clientAccount.name : 'N/A';
+
+          return {
+            id: campaign.id,
+            name: campaign.name,
+            clientName: clientName,
+            platform: campaign.platform.join(', ') || 'N/A', // Transforma array em string
+            objective: campaign.objective.join(', ') || 'N/A', // Transforma array em string
+            status: campaign.status,
+            dailyBudget: campaign.daily_budget,
+          };
+        });
+        setCampaigns(mappedCampaigns);
+        setTotalItems(response.data.pagination?.totalItems || 0);
+        setTotalPages(response.data.pagination?.totalPages || 0);
+      } else {
+        console.error('[CampaignManager] Estrutura de dados inesperada da API de campanhas:', response.data);
+        setCampaigns([]); // Garante que campaigns seja um array vazio para evitar o erro
+        setTotalItems(0);
+        setTotalPages(0);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar dados das campanhas:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar as campanhas.',
+        variant: 'destructive',
+      });
+      setCampaigns([]); // Garante que campaigns seja um array vazio em caso de erro
+      setTotalItems(0);
+      setTotalPages(0);
     } finally {
       setIsLoadingData(false);
-      console.log("[Campaigns] FetchData finished.");
     }
-  }, [token, toast, filterStatus, filterClientAccount, searchTerm, currentPage, itemsPerPage, sortBy, sortOrder, availableClientAccounts]);
+  }, [token, currentPage, itemsPerPage, sortBy, sortOrder, searchTerm, filterStatus, filterClientAccount, availableClientAccounts, toast, API_URL]);
 
+
+  // Efeitos para carregar dados
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && token) {
+      fetchClientAccounts();
+    }
+  }, [authLoading, isAuthenticated, token, fetchClientAccounts]);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push('/login');
-    } else if (!authLoading && isAuthenticated && token) {
-      fetchClientAccounts(); 
+    if (!authLoading && isAuthenticated && token && availableClientAccounts.length > 0) { // Garante que as contas de cliente já foram carregadas
+      fetchData();
     }
-  }, [authLoading, isAuthenticated, router, token, fetchClientAccounts]);
-
-  useEffect(() => {
-    if (token) { 
-        fetchData();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm, token]);
+  }, [authLoading, isAuthenticated, token, fetchData, availableClientAccounts]);
 
 
   const handleOpenForm = (campaign?: CampaignListItem) => {
-    const formDataForEdit = campaign ? { 
-        ...campaign,
-        start_date: campaign.start_date ? new Date(campaign.start_date) : null,
-        end_date: campaign.end_date ? new Date(campaign.end_date) : null,
-     } : null;
-    setEditingCampaign(formDataForEdit as Partial<CampaignFormData> | null);
-    setIsFormOpen(true);
+    if (campaign) {
+      // Para edição, precisamos buscar os dados completos da campanha
+      const fetchFullCampaignData = async () => {
+        try {
+          const response = await axios.get<CampaignResponse>(`${API_URL}/api/campaigns?id=${campaign.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          console.log('[CampaignManager] Dados completos da campanha para edição:', response.data);
+          if (response.data) {
+            setEditingCampaignData({
+              id: response.data.id,
+              name: response.data.name,
+              status: response.data.status,
+              selectedClientAccountId: response.data.selectedClientAccountId,
+              platform: response.data.platform,
+              objective: response.data.objective,
+              ad_format: response.data.ad_format,
+              budget: response.data.budget,
+              daily_budget: response.data.daily_budget,
+              start_date: response.data.start_date,
+              end_date: response.data.end_date,
+              target_audience_description: response.data.target_audience_description,
+              industry: response.data.industry,
+              segmentation_notes: response.data.segmentation_notes,
+              avg_ticket: response.data.avg_ticket,
+              external_campaign_id: response.data.external_campaign_id,
+              platform_source: response.data.platform_source,
+              external_platform_account_id: response.data.external_platform_account_id,
+            });
+            setIsFormOpen(true);
+          }
+        } catch (error) {
+          console.error('Erro ao carregar dados completos da campanha para edição:', error);
+          toast({
+            title: 'Erro',
+            description: 'Não foi possível carregar os detalhes da campanha para edição.',
+            variant: 'destructive',
+          });
+        }
+      };
+      fetchFullCampaignData();
+    } else {
+      setEditingCampaignData(null); // Para criação de nova campanha
+      setIsFormOpen(true);
+    }
   };
 
   const handleCloseForm = () => {
     setIsFormOpen(false);
-    setEditingCampaign(null);
+    setEditingCampaignData(null);
   };
 
-  const handleSaveCampaign = async (formData: Partial<CampaignFormData>) => {
-    if (!token) {
-        toast({ title: "Erro de Autenticação", variant: "destructive" });
-        return;
-    }
-    const method = formData.id ? 'PUT' : 'POST';
-    const url = formData.id ? `/api/campaigns?id=${formData.id}` : '/api/campaigns';
+  const handleSaveCampaign = async (formData: CampaignFormData) => {
+    if (!token) return;
+
     try {
-      await axios({ method, url, data: formData, headers: { Authorization: `Bearer ${token}` } });
-      toast({ title: "Sucesso", description: `Campanha ${formData.id ? `"${formData.name}" atualizada` : `"${formData.name}" criada`}!` });
-      if (method === 'POST') setCurrentPage(1); 
-      fetchData(); 
+      if (formData.id) {
+        // Edição
+        await axios.put(`${API_URL}/api/campaigns?id=${formData.id}`, formData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        toast({ title: 'Sucesso', description: 'Campanha atualizada com sucesso.' });
+      } else {
+        // Criação
+        await axios.post(`${API_URL}/api/campaigns`, formData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        toast({ title: 'Sucesso', description: 'Campanha criada com sucesso.' });
+      }
+      handleCloseForm();
+      fetchData(); // Recarrega a lista de campanhas
     } catch (error: any) {
-      toast({ title: "Erro ao Salvar", description: error.response?.data?.message || error.message || "Falha.", variant: "destructive" });
-    }
-    handleCloseForm();
-  };
-
-  const handleDeleteCampaign = async (campaignId: string, campaignName?: string) => {
-    if (!token) {
-        toast({ title: "Erro de Autenticação", variant: "destructive" });
-        return;
-    }
-    if (!confirm(`Tem certeza que deseja excluir a campanha "${campaignName || campaignId}"?`)) return;
-    
-    try {
-        await axios.delete(`/api/campaigns?id=${campaignId}`, { headers: { Authorization: `Bearer ${token}` } });
-        toast({ title: "Excluído", description: `Campanha "${campaignName || campaignId}" foi excluída.`, variant: "destructive" });
-        if (campaigns.length === 1 && currentPage > 1 && totalItems > 1) { 
-            setCurrentPage(currentPage - 1);
-        } else {
-            fetchData();
-        }
-    } catch (error: any) {
-        toast({ title: "Erro ao Excluir", description: error.response?.data?.message || error.message || "Falha.", variant: "destructive" });
+      console.error('Erro ao salvar campanha:', error.response?.data || error.message);
+      toast({
+        title: 'Erro',
+        description: `Não foi possível salvar a campanha: ${error.response?.data?.details || error.response?.data?.error || error.message}`,
+        variant: 'destructive',
+      });
     }
   };
 
-  const handleSort = (columnKey: string) => {
-    if (isLoadingData) return;
-    const newSortOrder = sortBy === columnKey && sortOrder === 'asc' ? 'desc' : 'asc';
-    setSortBy(columnKey);
-    setSortOrder(newSortOrder);
-    setCurrentPage(1);
-  };
-  
-  const renderSortIcon = (columnKey: string) => {
-    if (sortBy === columnKey) {
-      return sortOrder === 'asc' ? <ChevronUp className="h-3 w-3 ml-1 inline-block" /> : <ChevronDown className="h-3 w-3 ml-1 inline-block" />;
+  const handleDeleteCampaign = async (id: string) => {
+    if (!token) return;
+
+    if (window.confirm('Tem certeza que deseja excluir esta campanha?')) {
+      try {
+        await axios.delete(`${API_URL}/api/campaigns?id=${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        toast({ title: 'Sucesso', description: 'Campanha excluída com sucesso.' });
+        fetchData(); // Recarrega a lista
+      } catch (error: any) {
+        console.error('Erro ao excluir campanha:', error.response?.data || error.message);
+        toast({
+          title: 'Erro',
+          description: `Não foi possível excluir a campanha: ${error.response?.data?.details || error.response?.data?.error || error.message}`,
+          variant: 'destructive',
+        });
+      }
     }
-    return <span className="h-3 w-3 ml-1 inline-block"></span>;
   };
 
-  // console.log('[Render Init] availableClientAccounts:', availableClientAccounts, Array.isArray(availableClientAccounts)); // DEBUG
-  // console.log('[Render Init] campaigns:', campaigns, Array.isArray(campaigns)); // DEBUG
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+    setCurrentPage(1); // Volta para a primeira página ao mudar a ordenação
+  };
 
-  if (authLoading && !token) return <Layout><div className="flex justify-center items-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></Layout>;
-  if (!isAuthenticated && !authLoading) return null; 
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Renderiza um spinner ou mensagem de carregamento enquanto autentica ou carrega dados
+  if (authLoading || (!isAuthenticated && !authLoading)) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-screen text-gray-400">
+          Carregando autenticação ou redirecionando...
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
-      <Head><title>Gestão de Tráfego - USBMKT</title></Head>
-      <div className="space-y-5 p-4 md:p-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-          <h1 className="text-2xl font-black text-white" style={{ textShadow: `0 0 8px ${neonColor}` }}>
-            Gestão de Tráfego
-          </h1>
-          <Button className={cn(primaryButtonStyle, "h-9 text-sm")} onClick={() => handleOpenForm()}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Campanha
+      <div className="container mx-auto p-4 md:p-6 custom-scrollbar">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold text-gray-50">Gestão de Tráfego</h1>
+          <Button onClick={() => handleOpenForm()} className="bg-neon-blue hover:bg-neon-blue-muted text-white shadow-lg transition-all duration-300 ease-in-out hover:neumorphic-neon-outset-glow">
+            <PlusCircle className="mr-2 h-5 w-5" /> Adicionar Campanha
           </Button>
         </div>
 
-        <Card className={cn(cardStyle, "p-3")}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-            <div className="md:col-span-2 lg:col-span-2">
-              <Label htmlFor="searchCampaign" className="text-xs text-gray-300 mb-1 block">Buscar Campanha</Label>
+        <Card className="mb-6 bg-[#1a1c23] border border-[#2a2d34] text-gray-100 shadow-neumorphic-outer-dark">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-gray-50">Filtros de Campanhas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input 
-                    id="searchCampaign" 
-                    placeholder="Nome, cliente, plataforma, objetivo..." 
-                    className={cn(neumorphicInputStyle, "pl-8 h-8 text-xs")} 
-                    value={searchTerm}
-                    onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}}
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar por nome ou ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 bg-[#2a2d34] border border-[#3a3d44] text-gray-100 placeholder:text-gray-400 focus-visible:ring-neon-blue"
                 />
               </div>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="bg-[#2a2d34] border border-[#3a3d44] text-gray-100 focus-visible:ring-neon-blue">
+                  <SelectValue placeholder="Filtrar por Status" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#2a2d34] border border-[#3a3d44] text-gray-100">
+                  <SelectItem value="">Todos os Status</SelectItem>
+                  <SelectItem value="active">Ativa</SelectItem>
+                  <SelectItem value="paused">Pausada</SelectItem>
+                  <SelectItem value="draft">Rascunho</SelectItem>
+                  <SelectItem value="completed">Concluída</SelectItem>
+                  <SelectItem value="archived">Arquivada</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterClientAccount} onValueChange={setFilterClientAccount}>
+                <SelectTrigger className="bg-[#2a2d34] border border-[#3a3d44] text-gray-100 focus-visible:ring-neon-blue">
+                  <SelectValue placeholder="Filtrar por Conta de Cliente" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#2a2d34] border border-[#3a3d44] text-gray-100">
+                  <SelectItem value="">Todas as Contas</SelectItem>
+                  {availableClientAccounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-                <Label htmlFor="filterStatus" className="text-xs text-gray-300 mb-1 block">Status</Label>
-                <Select value={filterStatus} onValueChange={(value) => {setFilterStatus(value); setCurrentPage(1);}}>
-                    <SelectTrigger id="filterStatus" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue /></SelectTrigger>
-                    <SelectContent className={selectContentStyle}>
-                        {STATUS_OPTIONS_FILTER.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div>
-                <Label htmlFor="filterClientAccount" className="text-xs text-gray-300 mb-1 block">Conta de Cliente</Label>
-                <Select value={filterClientAccount} onValueChange={(value) => {setFilterClientAccount(value); setCurrentPage(1);}} disabled={!Array.isArray(availableClientAccounts) || availableClientAccounts.length === 0 && !isLoadingData}>
-                    <SelectTrigger id="filterClientAccount" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue placeholder={isLoadingData && (!Array.isArray(availableClientAccounts) || availableClientAccounts.length === 0) ? "Carregando..." : "Selecione..."} /></SelectTrigger>
-                    <SelectContent className={selectContentStyle}>
-                        <SelectItem value="all">Todas as Contas</SelectItem>
-                        {Array.isArray(availableClientAccounts) && availableClientAccounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.platform.toUpperCase()})</SelectItem>))}
-                    </SelectContent>
-                </Select>
-            </div>
-          </div>
+          </CardContent>
+          <CardFooter className="flex justify-end p-4">
+            <Button onClick={() => fetchData()} className="bg-neon-blue hover:bg-neon-blue-muted text-white transition-all duration-300 ease-in-out hover:neumorphic-neon-outset-glow">
+              <Filter className="mr-2 h-4 w-4" /> Aplicar Filtros
+            </Button>
+          </CardFooter>
         </Card>
 
-        <Card className={cn(cardStyle)}>
-          <CardHeader className="px-4 py-3 border-b border-[#1E90FF]/10">
-            <CardTitle className="text-base font-semibold text-white">Lista de Campanhas ({totalItems})</CardTitle>
+        <Card className="bg-[#1a1c23] border border-[#2a2d34] text-gray-100 shadow-neumorphic-outer-dark">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-gray-50">Lista de Campanhas</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            {isLoadingData && !authLoading ? (
-              <div className="flex justify-center items-center py-10"><Loader2 className="h-6 w-6 animate-spin text-primary" /><span className="ml-2 text-gray-400">Carregando dados...</span></div>
+          <CardContent>
+            {isLoadingData ? (
+              <div className="flex justify-center items-center h-48 text-gray-400">
+                Carregando campanhas...
+              </div>
             ) : campaigns.length === 0 ? (
-              <p className="text-center text-gray-400 py-10">Nenhuma campanha encontrada com os filtros atuais. {searchTerm && "Tente refinar sua busca ou "}Clique em "Adicionar Campanha".</p>
+              <div className="text-center text-gray-400 py-8">
+                Nenhuma campanha encontrada com os filtros aplicados.
+              </div>
             ) : (
               <div className="overflow-x-auto">
-                {/* console.log('[Render] Campaigns before table map:', campaigns, Array.isArray(campaigns)) */} {/* DEBUG REMOVIDO DO JSX DIRETO */}
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b border-[#1E90FF]/10 hover:bg-transparent">
-                      <TableHead className={cn(tableHeaderStyle, "pl-4 w-[25%] cursor-pointer hover:text-white")} onClick={() => handleSort('name')}>Nome {renderSortIcon('name')}</TableHead>
-                      <TableHead className={cn(tableHeaderStyle, "w-[20%]")}>Cliente Vinculado</TableHead>
-                      <TableHead className={cn(tableHeaderStyle, "w-[15%]")}>Plataforma(s)</TableHead>
-                      <TableHead className={cn(tableHeaderStyle, "w-[15%]")}>Objetivo(s)</TableHead>
-                      <TableHead className={cn(tableHeaderStyle, "text-center w-[10%] cursor-pointer hover:text-white")} onClick={() => handleSort('status')}>Status {renderSortIcon('status')}</TableHead>
-                      <TableHead className={cn(tableHeaderStyle, "text-right w-[10%] cursor-pointer hover:text-white")} onClick={() => handleSort('daily_budget')}>Orç. Diário {renderSortIcon('daily_budget')}</TableHead>
-                      <TableHead className={cn(tableHeaderStyle, "text-center pr-4 w-[5%]")}>Ações</TableHead>
+                    <TableRow className="bg-[#2a2d34] hover:bg-[#2a2d34]">
+                      <TableHead onClick={() => handleSort('name')} className="cursor-pointer text-gray-50">
+                        Nome {sortBy === 'name' && (sortOrder === 'asc' ? <ChevronUp className="inline-block h-4 w-4 ml-1" /> : <ChevronDown className="inline-block h-4 w-4 ml-1" />)}
+                      </TableHead>
+                      <TableHead onClick={() => handleSort('clientName')} className="cursor-pointer text-gray-50">
+                        Cliente Vinculado {sortBy === 'clientName' && (sortOrder === 'asc' ? <ChevronUp className="inline-block h-4 w-4 ml-1" /> : <ChevronDown className="inline-block h-4 w-4 ml-1" />)}
+                      </TableHead>
+                      <TableHead className="text-gray-50">Plataforma(s)</TableHead>
+                      <TableHead className="text-gray-50">Objetivo(s)</TableHead>
+                      <TableHead onClick={() => handleSort('status')} className="cursor-pointer text-gray-50">
+                        Status {sortBy === 'status' && (sortOrder === 'asc' ? <ChevronUp className="inline-block h-4 w-4 ml-1" /> : <ChevronDown className="inline-block h-4 w-4 ml-1" />)}
+                      </TableHead>
+                      <TableHead className="text-gray-50 text-right">Orçamento Diário</TableHead>
+                      <TableHead className="text-gray-50"><span className="sr-only">Ações</span></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {Array.isArray(campaigns) && campaigns.map(campaign => ( // Adicionada verificação Array.isArray aqui
-                      <TableRow key={campaign.id} className="border-b border-[#1E90FF]/5 hover:bg-[#0A0B0F]/50 transition-colors">
-                        <TableCell className={cn(tableCellStyle, "font-medium pl-4 truncate")} title={campaign.name}>{campaign.name}</TableCell>
-                        <TableCell className={cn(tableCellStyle, "truncate")} title={campaign.clientAccountName}>{campaign.clientAccountName || 'N/A'}</TableCell>
-                        <TableCell className={cn(tableCellStyle, "truncate")} title={campaign.platformText}>{campaign.platformText || 'N/A'}</TableCell>
-                        <TableCell className={cn(tableCellStyle, "truncate")} title={campaign.objectiveText}>{campaign.objectiveText || 'N/A'}</TableCell>
-                        <TableCell className={cn(tableCellStyle, "text-center")}>
-                          <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0.5 border", statusBadgeColors[campaign.status.toLowerCase()] || statusBadgeColors.draft)}>
-                            {STATUS_OPTIONS_FILTER.find(s=>s.value === campaign.status)?.label || campaign.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className={cn(tableCellStyle, "text-right")}>{formatCurrency(campaign.daily_budget)}</TableCell>
-                        <TableCell className={cn(tableCellStyle, "text-center pr-4")}>
-                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" className="h-7 w-7 p-0 data-[state=open]:bg-slate-700"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className={selectContentStyle}>
-                              <DropdownMenuItem onClick={() => handleOpenForm(campaign)} className="cursor-pointer hover:!bg-[#1E90FF]/20"><Edit className="mr-2 h-3.5 w-3.5" /> Editar</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDeleteCampaign(campaign.id!, campaign.name)} className="cursor-pointer !text-red-400 hover:!bg-red-700/30"><Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir</DropdownMenuItem>
+                    {campaigns.map((campaign) => (
+                      <TableRow key={campaign.id} className="border-b border-[#2a2d34] hover:bg-[#20222a]">
+                        <TableCell className="font-medium text-gray-100">{campaign.name}</TableCell>
+                        <TableCell className="text-gray-200">{campaign.clientName}</TableCell>
+                        <TableCell className="text-gray-200">{campaign.platform}</TableCell>
+                        <TableCell className="text-gray-200">{campaign.objective}</TableCell>
+                        <TableCell className="text-gray-200">{campaign.status}</TableCell>
+                        <TableCell className="text-gray-200 text-right">R$ {campaign.dailyBudget.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0 text-gray-400 hover:bg-[#3a3d44]">
+                                <span className="sr-only">Abrir menu</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-[#2a2d34] border border-[#3a3d44] text-gray-100">
+                              <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                              <DropdownMenuItem
+                                onClick={() => handleOpenForm(campaign)}
+                                className="hover:bg-[#3a3d44] focus:bg-[#3a3d44] cursor-pointer"
+                              >
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator className="bg-[#3a3d44]" />
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteCampaign(campaign.id)}
+                                className="text-red-400 hover:bg-red-900/20 focus:bg-red-900/20 cursor-pointer"
+                              >
+                                Excluir
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -394,35 +460,44 @@ export default function CampaignManagerPage() {
               </div>
             )}
           </CardContent>
-           {totalPages > 0 && (
-            <CardFooter className="py-3 px-4 border-t border-[#1E90FF]/10 flex items-center justify-between sm:justify-end space-x-2">
-                <span className="text-xs text-gray-400 hidden sm:inline-block">Página {currentPage} de {totalPages} ({totalItems} resultados)</span>
-                <div className="flex space-x-1">
-                    <Button
-                        variant="outline" size="sm" className={cn(neumorphicInputStyle, "h-7 px-2 text-xs")}
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1 || isLoadingData}
-                    > Anterior </Button>
-                    <Button
-                        variant="outline" size="sm" className={cn(neumorphicInputStyle, "h-7 px-2 text-xs")}
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages || isLoadingData}
-                    > Próxima </Button>
-                </div>
-            </CardFooter>
-           )}
+          <CardFooter className="flex justify-between items-center p-4 border-t border-[#2a2d34]">
+            <div className="text-sm text-gray-400">
+              Mostrando {campaigns.length} de {totalItems} campanhas.
+            </div>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} />
+                </PaginationItem>
+                {[...Array(totalPages)].map((_, index) => (
+                  <PaginationItem key={index}>
+                    <PaginationLink
+                      onClick={() => handlePageChange(index + 1)}
+                      isActive={currentPage === index + 1}
+                      className={currentPage === index + 1 ? "bg-neon-blue text-white hover:bg-neon-blue-muted" : "text-gray-200 hover:bg-[#3a3d44]"}
+                    >
+                      {index + 1}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+                <PaginationItem>
+                  <PaginationNext onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </CardFooter>
         </Card>
-      </div>
 
-      {isFormOpen && (
-         <CampaignManagerForm
+        <CampaignManagerForm
           isOpen={isFormOpen}
           onClose={handleCloseForm}
           onSave={handleSaveCampaign}
-          campaignData={editingCampaign}
-          availableClientAccounts={availableClientAccounts} // Garanta que isso seja sempre um array
-         />
-      )}
+          campaignData={editingCampaignData}
+          availableClientAccounts={availableClientAccounts}
+        />
+      </div>
     </Layout>
   );
-}
+};
+
+export default CampaignManagerPage;
