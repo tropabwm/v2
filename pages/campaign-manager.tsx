@@ -36,8 +36,8 @@ interface CampaignResponse {
   ad_format: string[];
   daily_budget: number;
   budget: number;
-  start_date: string;
-  end_date: string;
+  start_date: string; // Vem como string da API
+  end_date: string;   // Vem como string da API
   target_audience_description: string;
   industry: string;
   segmentation_notes: string;
@@ -53,8 +53,8 @@ interface CampaignListItem {
   id: string;
   name: string;
   clientName: string; // Nome da conta do cliente
-  platform: string; // Ex: Google Ads, Meta Ads
-  objective: string; // Ex: Vendas, Leads
+  platform: string; // Ex: Google Ads, Meta Ads (string formatada)
+  objective: string; // Ex: Vendas, Leads (string formatada)
   status: string;
   dailyBudget: number;
 }
@@ -84,7 +84,7 @@ const CampaignManagerPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterClientAccount, setFilterClientAccount] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10); // Pode ser ajustado ou selecionável
+  const [itemsPerPage] = useState(10); // Pode ser ajustado ou selecionável
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [sortBy, setSortBy] = useState('name');
@@ -99,13 +99,12 @@ const CampaignManagerPage: React.FC = () => {
       const response = await axios.get<ClientAccountOption[]>(`${API_URL}/api/client-accounts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      console.log('[CampaignManager] Contas de cliente carregadas:', response.data); // Log para inspecionar
-      // **VERIFICAÇÃO CRÍTICA AQUI**
+      console.log('[CampaignManager] Contas de cliente carregadas:', response.data);
       if (Array.isArray(response.data)) {
         setAvailableClientAccounts(response.data);
       } else {
         console.error('[CampaignManager] Resposta inesperada para client-accounts:', response.data);
-        setAvailableClientAccounts([]); // Garante que seja um array
+        setAvailableClientAccounts([]);
       }
     } catch (error) {
       console.error('Erro ao carregar contas de cliente:', error);
@@ -114,7 +113,7 @@ const CampaignManagerPage: React.FC = () => {
         description: 'Não foi possível carregar as contas de cliente.',
         variant: 'destructive',
       });
-      setAvailableClientAccounts([]); // Garante que seja um array em caso de erro
+      setAvailableClientAccounts([]);
     }
   }, [token, toast, API_URL]);
 
@@ -137,12 +136,10 @@ const CampaignManagerPage: React.FC = () => {
         },
       });
 
-      console.log('[CampaignManager] Resposta da API /api/campaigns:', response.data); // Log para inspecionar
+      console.log('[CampaignManager] Resposta da API /api/campaigns:', response.data);
 
-      // **VERIFICAÇÃO CRÍTICA AQUI**
       if (response.data && Array.isArray(response.data.data)) {
         const mappedCampaigns: CampaignListItem[] = response.data.data.map((campaign: CampaignResponse) => {
-          // Encontrar o nome da conta do cliente correspondente
           const clientAccount = availableClientAccounts.find(acc => acc.id === campaign.selectedClientAccountId);
           const clientName = clientAccount ? clientAccount.name : 'N/A';
 
@@ -150,8 +147,8 @@ const CampaignManagerPage: React.FC = () => {
             id: campaign.id,
             name: campaign.name,
             clientName: clientName,
-            platform: campaign.platform.join(', ') || 'N/A', // Transforma array em string
-            objective: campaign.objective.join(', ') || 'N/A', // Transforma array em string
+            platform: campaign.platform?.join(', ') || 'N/A', // Usar '?' para segurança, caso platform seja null/undefined
+            objective: campaign.objective?.join(', ') || 'N/A', // Usar '?' para segurança
             status: campaign.status,
             dailyBudget: campaign.daily_budget,
           };
@@ -161,7 +158,7 @@ const CampaignManagerPage: React.FC = () => {
         setTotalPages(response.data.pagination?.totalPages || 0);
       } else {
         console.error('[CampaignManager] Estrutura de dados inesperada da API de campanhas:', response.data);
-        setCampaigns([]); // Garante que campaigns seja um array vazio para evitar o erro
+        setCampaigns([]);
         setTotalItems(0);
         setTotalPages(0);
       }
@@ -172,7 +169,7 @@ const CampaignManagerPage: React.FC = () => {
         description: 'Não foi possível carregar as campanhas.',
         variant: 'destructive',
       });
-      setCampaigns([]); // Garante que campaigns seja um array vazio em caso de erro
+      setCampaigns([]);
       setTotalItems(0);
       setTotalPages(0);
     } finally {
@@ -189,7 +186,8 @@ const CampaignManagerPage: React.FC = () => {
   }, [authLoading, isAuthenticated, token, fetchClientAccounts]);
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated && token && availableClientAccounts.length > 0) { // Garante que as contas de cliente já foram carregadas
+    // Só busca campanhas se já tiver o token, estiver autenticado E as contas de cliente já tiverem sido carregadas
+    if (!authLoading && isAuthenticated && token && availableClientAccounts.length > 0) {
       fetchData();
     }
   }, [authLoading, isAuthenticated, token, fetchData, availableClientAccounts]);
@@ -199,6 +197,15 @@ const CampaignManagerPage: React.FC = () => {
     if (campaign) {
       // Para edição, precisamos buscar os dados completos da campanha
       const fetchFullCampaignData = async () => {
+        if (!token) {
+            toast({
+                title: 'Erro de Autenticação',
+                description: 'Token de autenticação ausente. Por favor, faça login novamente.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
         try {
           const response = await axios.get<CampaignResponse>(`${API_URL}/api/campaigns?id=${campaign.id}`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -215,8 +222,9 @@ const CampaignManagerPage: React.FC = () => {
               ad_format: response.data.ad_format,
               budget: response.data.budget,
               daily_budget: response.data.daily_budget,
-              start_date: response.data.start_date,
-              end_date: response.data.end_date,
+              // CONVERSÃO DE STRING PARA OBJETO DATE AQUI
+              start_date: response.data.start_date ? new Date(response.data.start_date) : undefined,
+              end_date: response.data.end_date ? new Date(response.data.end_date) : undefined,
               target_audience_description: response.data.target_audience_description,
               industry: response.data.industry,
               segmentation_notes: response.data.segmentation_notes,
@@ -249,7 +257,14 @@ const CampaignManagerPage: React.FC = () => {
   };
 
   const handleSaveCampaign = async (formData: CampaignFormData) => {
-    if (!token) return;
+    if (!token) {
+        toast({
+            title: 'Erro de Autenticação',
+            description: 'Token de autenticação ausente. Por favor, faça login novamente.',
+            variant: 'destructive',
+        });
+        return;
+    }
 
     try {
       if (formData.id) {
@@ -278,7 +293,14 @@ const CampaignManagerPage: React.FC = () => {
   };
 
   const handleDeleteCampaign = async (id: string) => {
-    if (!token) return;
+    if (!token) {
+        toast({
+            title: 'Erro de Autenticação',
+            description: 'Token de autenticação ausente. Por favor, faça login novamente.',
+            variant: 'destructive',
+        });
+        return;
+    }
 
     if (window.confirm('Tem certeza que deseja excluir esta campanha?')) {
       try {
