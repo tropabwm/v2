@@ -11,7 +11,7 @@ import { PlusCircle, ListFilter, Search, Edit, Trash2, MoreHorizontal, Loader2, 
 import CampaignManagerForm, { CampaignFormData, ClientAccountOption } from '@/components/CampaignManagerForm';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/router';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; // <<< CardFooter adicionado
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,7 +32,6 @@ interface CampaignListItem extends CampaignFormData {
   objectiveText?: string;
 }
 
-// Tipos para a resposta paginada da API
 interface PaginatedApiResponse<T> {
   data: T[];
   pagination: {
@@ -103,12 +102,16 @@ export default function CampaignManagerPage() {
   const selectContentStyle = "bg-[#1e2128] border-[#1E90FF]/30 text-white";
 
   const fetchClientAccounts = useCallback(async () => {
+    console.log("[ClientAccounts] Fetching... Token:", token ? 'present' : 'absent');
     if (!token) return;
     try {
       const response = await axios.get<ClientAccountOption[]>('/api/client-accounts', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setAvailableClientAccounts(response.data || []);
+      console.log('[ClientAccounts] API Response:', response);
+      console.log('[ClientAccounts] response.data:', response.data);
+      console.log('[ClientAccounts] Is response.data an array?:', Array.isArray(response.data));
+      setAvailableClientAccounts(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error("Erro ao buscar contas de clientes:", error);
       toast({ title: "Erro", description: "Falha ao carregar contas de clientes.", variant: "destructive" });
@@ -117,56 +120,75 @@ export default function CampaignManagerPage() {
   }, [token, toast]);
 
   const fetchData = useCallback(async () => {
+    console.log("[Campaigns] FetchData called. Token:", token ? 'present' : 'absent');
     if (!token) {
       setIsLoadingData(false);
+      console.log("[Campaigns] No token, aborting fetchData.");
       return;
     }
     setIsLoadingData(true);
-    let activeClientAccounts = availableClientAccounts;
-    if (activeClientAccounts.length === 0) {
+    
+    let currentClientAccounts = availableClientAccounts;
+    if (currentClientAccounts.length === 0 && token) {
+        console.log("[Campaigns] availableClientAccounts is empty, attempting to fetch them within fetchData.");
         try {
             const clientAccountsResponse = await axios.get<ClientAccountOption[]>('/api/client-accounts', { headers: { Authorization: `Bearer ${token}` }});
-            activeClientAccounts = clientAccountsResponse.data || [];
-            setAvailableClientAccounts(activeClientAccounts); // Atualiza o estado se buscou agora
+            console.log('[Campaigns] Inner fetchClientAccounts Response.data:', clientAccountsResponse.data);
+            currentClientAccounts = Array.isArray(clientAccountsResponse.data) ? clientAccountsResponse.data : [];
+            if(availableClientAccounts.length === 0) setAvailableClientAccounts(currentClientAccounts);
         } catch (error) {
-             console.error("Erro ao buscar contas de clientes em fetchData:", error);
-             activeClientAccounts = []; // Garante que é um array
+            console.error("Erro ao buscar contas de clientes dentro de fetchData:", error);
+            currentClientAccounts = [];
         }
     }
+    console.log("[Campaigns] Using client accounts for mapping:", currentClientAccounts, Array.isArray(currentClientAccounts));
+
 
     try {
       const params = new URLSearchParams();
       if (filterStatus !== 'all') params.append('status', filterStatus);
       if (filterClientAccount !== 'all') params.append('selectedClientAccountId', filterClientAccount);
       if (searchTerm.trim()) params.append('search', searchTerm.trim());
-
       params.append('page', String(currentPage));
       params.append('limit', String(itemsPerPage));
       params.append('sortBy', sortBy);
       params.append('sortOrder', sortOrder);
 
+      console.log(`[Campaigns] Fetching /api/campaigns with params: ${params.toString()}`);
       const response = await axios.get<PaginatedApiResponse<CampaignFormData>>(`/api/campaigns?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      const mappedCampaigns = (response.data.data || []).map(c => ({
-        ...c,
-        id: c.id!,
-        clientAccountName: activeClientAccounts.find(acc => acc.id === c.selectedClientAccountId)?.name || 'N/A',
-        platformText: Array.isArray(c.platform) ? c.platform.join(', ') : (typeof c.platform === 'string' ? c.platform : 'N/A'),
-        objectiveText: Array.isArray(c.objective) ? c.objective.join(', ') : (typeof c.objective === 'string' ? c.objective : 'N/A'),
-      }));
-      setCampaigns(mappedCampaigns);
-      setTotalItems(response.data.pagination.totalItems);
-      setTotalPages(response.data.pagination.totalPages);
-    } catch (error) {
-      console.error("Erro ao buscar dados das campanhas:", error);
+      console.log('[Campaigns] API /api/campaigns Full Response:', response);
+      console.log('[Campaigns] API /api/campaigns response.data:', response.data);
+      
+      if (response.data && response.data.pagination && Array.isArray(response.data.data)) {
+        console.log('[Campaigns] response.data.data IS an array. Length:', response.data.data.length);
+        const mappedCampaigns = response.data.data.map(c => ({
+          ...c,
+          id: c.id!,
+          clientAccountName: currentClientAccounts.find(acc => acc.id === c.selectedClientAccountId)?.name || 'N/A',
+          platformText: Array.isArray(c.platform) ? c.platform.join(', ') : (typeof c.platform === 'string' ? c.platform : 'N/A'),
+          objectiveText: Array.isArray(c.objective) ? c.objective.join(', ') : (typeof c.objective === 'string' ? c.objective : 'N/A'),
+        }));
+        setCampaigns(mappedCampaigns);
+        setTotalItems(response.data.pagination.totalItems);
+        setTotalPages(response.data.pagination.totalPages);
+      } else {
+        console.error('[Campaigns] Estrutura inesperada da API /api/campaigns ou response.data.data não é array:', response.data);
+        setCampaigns([]);
+        setTotalItems(0);
+        setTotalPages(0);
+      }
+    } catch (error: any) {
+      console.error("Erro ao buscar dados das campanhas:", error.response?.data || error.message);
       toast({ title: "Erro de Carregamento", description: "Falha ao carregar campanhas.", variant: "destructive" });
       setCampaigns([]);
       setTotalItems(0);
       setTotalPages(0);
     } finally {
       setIsLoadingData(false);
+      console.log("[Campaigns] FetchData finished.");
     }
   }, [token, toast, filterStatus, filterClientAccount, searchTerm, currentPage, itemsPerPage, sortBy, sortOrder, availableClientAccounts]);
 
@@ -183,7 +205,7 @@ export default function CampaignManagerPage() {
     if (token) { 
         fetchData();
     }
-  }, [token, fetchData, currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm]);
+  }, [token, fetchData]); // Removido dependências que já estão em fetchData para evitar loops excessivos. fetchData em si tem as dependências corretas.
 
 
   const handleOpenForm = (campaign?: CampaignListItem) => {
@@ -211,7 +233,7 @@ export default function CampaignManagerPage() {
     try {
       await axios({ method, url, data: formData, headers: { Authorization: `Bearer ${token}` } });
       toast({ title: "Sucesso", description: `Campanha ${formData.id ? `"${formData.name}" atualizada` : `"${formData.name}" criada`}!` });
-      if (method === 'POST') setCurrentPage(1); // Se for nova, vai pra primeira página
+      if (method === 'POST') setCurrentPage(1); 
       fetchData(); 
     } catch (error: any) {
       toast({ title: "Erro ao Salvar", description: error.response?.data?.message || error.message || "Falha.", variant: "destructive" });
@@ -229,7 +251,6 @@ export default function CampaignManagerPage() {
     try {
         await axios.delete(`/api/campaigns?id=${campaignId}`, { headers: { Authorization: `Bearer ${token}` } });
         toast({ title: "Excluído", description: `Campanha "${campaignName || campaignId}" foi excluída.`, variant: "destructive" });
-        // Se estava na última página e excluiu o último item, pode precisar ajustar currentPage
         if (campaigns.length === 1 && currentPage > 1) {
             setCurrentPage(currentPage - 1);
         } else {
@@ -252,8 +273,16 @@ export default function CampaignManagerPage() {
     if (sortBy === columnKey) {
       return sortOrder === 'asc' ? <ChevronUp className="h-3 w-3 ml-1 inline-block" /> : <ChevronDown className="h-3 w-3 ml-1 inline-block" />;
     }
-    return <span className="h-3 w-3 ml-1 inline-block"></span>; // Espaço para alinhar
+    return <span className="h-3 w-3 ml-1 inline-block"></span>;
   };
+
+  // Efeito para rebuscar dados quando filtros, página ou ordenação mudam
+  useEffect(() => {
+    if (token) { // Apenas buscar se houver token
+        fetchData();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [currentPage, filterStatus, filterClientAccount, sortBy, sortOrder, searchTerm, token]); // fetchData não precisa estar aqui se suas dependências internas já cobrem isso.
 
 
   if (authLoading && !token) return <Layout><div className="flex justify-center items-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></Layout>;
@@ -299,7 +328,7 @@ export default function CampaignManagerPage() {
             <div>
                 <Label htmlFor="filterClientAccount" className="text-xs text-gray-300 mb-1 block">Conta de Cliente</Label>
                 <Select value={filterClientAccount} onValueChange={(value) => {setFilterClientAccount(value); setCurrentPage(1);}} disabled={availableClientAccounts.length === 0 && !isLoadingData}>
-                    <SelectTrigger id="filterClientAccount" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue placeholder={isLoadingData ? "Carregando..." : "Selecione..."} /></SelectTrigger>
+                    <SelectTrigger id="filterClientAccount" className={cn(neumorphicInputStyle, "h-8 text-xs")}><SelectValue placeholder={isLoadingData && availableClientAccounts.length === 0 ? "Carregando..." : "Selecione..."} /></SelectTrigger>
                     <SelectContent className={selectContentStyle}>
                         <SelectItem value="all">Todas as Contas</SelectItem>
                         {availableClientAccounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.platform.toUpperCase()})</SelectItem>))}
@@ -361,7 +390,7 @@ export default function CampaignManagerPage() {
               </div>
             )}
           </CardContent>
-           {totalPages > 0 && ( // Mostrar paginação apenas se houver páginas
+           {totalPages > 0 && (
             <CardFooter className="py-3 px-4 border-t border-[#1E90FF]/10 flex items-center justify-between sm:justify-end space-x-2">
                 <span className="text-xs text-gray-400 hidden sm:inline-block">Página {currentPage} de {totalPages} ({totalItems} resultados)</span>
                 <div className="flex space-x-1">
