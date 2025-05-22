@@ -1,4 +1,4 @@
-// pages/api/auth/register.ts
+// pages/api/register.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import bcrypt from 'bcrypt';
 import { getDbPool, initializeAllTables } from '@/lib/db-mysql';
@@ -58,8 +58,8 @@ export default async function handler(
         throw new Error("Falha ao obter pool de conexão MySQL.");
     }
 
-    // await initializeAllTables(); // Considere remover ou otimizar esta chamada em produção
-    console.log("[API Register] Tabelas inicializadas/verificadas (se a lógica em db-mysql permitir).");
+    await initializeAllTables(); 
+    console.log("[API Register] Tabelas inicializadas/verificadas.");
 
     console.log(`[API Register] Verificando existência de username: ${username} ou email: ${email}`);
     const [existingUserRows] = await dbPool.query<mysql.RowDataPacket[]>(
@@ -85,7 +85,7 @@ export default async function handler(
     console.log(`[API Register] Inserindo usuário: ${username}, email: ${email}`);
     const [insertResult] = await dbPool.query<mysql.ResultSetHeader>(
       'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
-      [username, email.toLowerCase(), passwordHash] 
+      [username, email.toLowerCase(), passwordHash] // Armazenar email em minúsculas
     );
 
     const newUserId = insertResult.insertId;
@@ -117,6 +117,7 @@ export default async function handler(
 
   } catch (error: any) {
     console.error('[API Register] Erro no processamento:', error);
+    // ER_DUP_ENTRY para MySQL, UNIQUE constraint violation para outros
     const isDuplicateError = error.code === 'ER_DUP_ENTRY' || (error.message && error.message.toLowerCase().includes('duplicate entry'));
     
     let clientMessage = 'Erro interno ao registrar usuário.';

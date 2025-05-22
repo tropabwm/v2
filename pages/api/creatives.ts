@@ -1,10 +1,8 @@
 // pages/api/creatives.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import crypto from 'crypto';
-import { getDbPool } from '@/lib/db-mysql';
+import { getDbPool } from '@/lib/db-mysql'; // Removidas initializeCreativesTable e initializeCampaignsTable
 import mysql from 'mysql2/promise';
-import path from 'path'; // ADICIONADO
-import fs from 'fs/promises'; // ADICIONADO
 
 // Interface para os dados de um "Creative" - Alinhada com o schema de initializeCreativesTable
 interface CreativeData {
@@ -12,16 +10,16 @@ interface CreativeData {
     campaign_id?: string | null;
     user_id?: number | null;
     name: string;
-    type?: 'image' | 'video' | 'text' | 'carousel' | 'headline' | 'body' | 'cta' | 'other';
+    type?: 'image' | 'video' | 'text' | 'carousel' | 'other';
     file_url?: string | null;
-    content?: string | null; // Pode ser JSON para carrossel, ou texto para ad copy, ou caminho do arquivo
+    content?: string | null; // Pode ser JSON para carrossel, ou texto para ad copy
     metrics?: any | null;    // JSON para métricas específicas do criativo
     status?: 'active' | 'inactive' | 'draft' | 'archived';
-    publish_date?: string | null; 
-    originalFilename?: string | null; 
-    comments?: string | null; 
-    format?: string | null; 
-    platform?: string[] | string | null; 
+    publish_date?: string | null; // Adicionado, se necessário
+    originalFilename?: string | null; // Adicionado, se necessário
+    comments?: string | null; // Adicionado, se necessário
+    format?: string | null; // Adicionado, se necessário
+    platform?: string[] | string | null; // Adicionado, se necessário
     created_at?: string; // Gerado pelo DB
     updated_at?: string; // Gerado pelo DB
 }
@@ -61,6 +59,7 @@ export default async function handler(
             return res.status(503).json({ message: "Serviço de banco de dados indisponível.", error: "DB_POOL_UNAVAILABLE" });
         }
         
+        // Assumimos que initializeAllTables() já foi chamado na inicialização do servidor.
         dbConnection = await dbPool.getConnection();
         console.debug(`[API Creatives ${req.method}] Conexão com DB obtida.`);
 
@@ -132,6 +131,7 @@ export default async function handler(
                     catch (dateError) { console.warn("Data de publicação inválida no POST:", creativeInput.publish_date); }
                 }
 
+
                 const insertQuery = `
                     INSERT INTO creatives 
                     (id, campaign_id, user_id, name, type, file_url, content, metrics, status, platform, format, publish_date, originalFilename, comments) 
@@ -200,16 +200,14 @@ export default async function handler(
                         let value = (updateData as any)[key];
                         if ((key === 'metrics' || key === 'platform') && value !== null && value !== undefined) {
                             value = JSON.stringify(value);
-                        } else if (key === 'publish_date' && value !== null && value !== undefined && value !== '') { 
+                        } else if (key === 'publish_date' && value !== null && value !== '') {
                             try { value = new Date(value).toISOString().slice(0, 19).replace('T', ' '); }
                             catch(dateError){ value = null; console.warn(`Data de publicação inválida no PUT para ${key}: ${value}`);}
                         }
-                        if (value === '' && ['campaign_id', 'file_url', 'content', 'comments', 'format', 'originalFilename', 'publish_date'].includes(key)) {
+                        // Tratar string vazia como null para campos que permitem null
+                        if (value === '' && ['campaign_id', 'user_id', 'file_url', 'content', 'comments', 'format', 'originalFilename', 'publish_date'].includes(key)) {
                             valuesToUpdate.push(null);
-                        } else if (key === 'user_id' && (value === '' || value === null || value === undefined)) {
-                             valuesToUpdate.push(null);
-                        }
-                        else {
+                        } else {
                             valuesToUpdate.push(value);
                         }
                     }
@@ -221,7 +219,7 @@ export default async function handler(
                 }
 
                 valuesToUpdate.push(updateId);
-                const updateQuery = `UPDATE creatives SET ${fieldsToUpdateSQL.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+                const updateQuery = `UPDATE creatives SET ${fieldsToUpdateSQL.join(', ')} WHERE id = ?`;
                 const [updateResult] = await dbConnection.query<mysql.ResultSetHeader>(updateQuery, valuesToUpdate);
 
                 if (updateResult.affectedRows === 0) {
@@ -230,23 +228,7 @@ export default async function handler(
                     if (checkRows.length === 0) {
                        return res.status(404).json({ message: `Criativo com ID ${updateId} não encontrado.` });
                     }
-                    console.log(`[API Creatives PUT] Nenhuma linha afetada para criativo ${updateId}, mas criativo existe. Dados podem ser os mesmos.`);
-                    const [currentCreativeRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM creatives WHERE id = ?', [updateId]);
-                    if (currentCreativeRows.length > 0) {
-                        let currentPlatformData = null;
-                        if (currentCreativeRows[0].platform && typeof currentCreativeRows[0].platform === 'string') { try { currentPlatformData = JSON.parse(currentCreativeRows[0].platform); } catch(e) {} }
-                        else if (Array.isArray(currentCreativeRows[0].platform)) { currentPlatformData = currentCreativeRows[0].platform; }
-                        
-                        const currentCreative = {
-                            ...currentCreativeRows[0],
-                            metrics: currentCreativeRows[0].metrics && typeof currentCreativeRows[0].metrics === 'string' ? JSON.parse(currentCreativeRows[0].metrics) : (currentCreativeRows[0].metrics || null),
-                            platform: currentPlatformData,
-                            created_at: currentCreativeRows[0].created_at ? new Date(currentCreativeRows[0].created_at).toISOString() : undefined,
-                            updated_at: currentCreativeRows[0].updated_at ? new Date(currentCreativeRows[0].updated_at).toISOString() : undefined,
-                        } as CreativeData;
-                        return res.status(200).json(currentCreative);
-                    }
-                    return res.status(404).json({ message: `Criativo com ID ${updateId} não encontrado.` });
+                    return res.status(200).json({ message: `Nenhum dado alterado para o criativo ${updateId}.`, id: updateId as string, changes: 0 });
                 }
 
                 const [updatedCreativeRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT * FROM creatives WHERE id = ?', [updateId]);
@@ -277,28 +259,13 @@ export default async function handler(
                     await dbConnection.rollback();
                     return res.status(400).json({ message: "ID do criativo é obrigatório para deleção." });
                 }
-                
-                const [creativeToDeleteRows] = await dbConnection.query<mysql.RowDataPacket[]>('SELECT content FROM creatives WHERE id = ?', [deleteId]);
-                const deleteResult = await dbConnection.query<mysql.ResultSetHeader>('DELETE FROM creatives WHERE id = ?', [deleteId]);
-
-                if (deleteResult[0].affectedRows === 0) {
+                const [deleteResult] = await dbConnection.query<mysql.ResultSetHeader>('DELETE FROM creatives WHERE id = ?', [deleteId]);
+                if (deleteResult.affectedRows === 0) {
                     await dbConnection.rollback();
                     return res.status(404).json({ message: `Criativo com ID ${deleteId} não encontrado.` });
                 }
-                
-                if (creativeToDeleteRows.length > 0 && creativeToDeleteRows[0].content && typeof creativeToDeleteRows[0].content === 'string' && creativeToDeleteRows[0].content.startsWith('/uploads/')) {
-                    const UPLOAD_DIR_PHYSICAL = path.join(process.cwd(), 'uploads');
-                    const physicalFilePath = path.join(UPLOAD_DIR_PHYSICAL, path.basename(creativeToDeleteRows[0].content));
-                    try {
-                        await fs.unlink(physicalFilePath);
-                        console.log(`[API Creatives DELETE] Arquivo físico ${physicalFilePath} deletado.`);
-                    } catch (fileError: any) {
-                        console.warn(`[API Creatives DELETE] Falha ao deletar arquivo físico ${physicalFilePath}:`, fileError.message);
-                    }
-                }
-
                 await dbConnection.commit();
-                res.status(200).json({ message: `Criativo ${deleteId} deletado com sucesso.`, id: deleteId as string, changes: deleteResult[0].affectedRows });
+                res.status(200).json({ message: `Criativo ${deleteId} deletado com sucesso.`, id: deleteId as string, changes: deleteResult.affectedRows });
                 break;
 
             default:

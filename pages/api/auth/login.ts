@@ -1,8 +1,8 @@
-// pages/api/auth/login.ts
+// pages/api/login.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { getDbPool } from '@/lib/db-mysql';
+import { getDbPool } from '@/lib/db-mysql'; 
 import mysql from 'mysql2/promise';
 
 type LoginResponse = {
@@ -23,15 +23,15 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
     console.error("\nFATAL ERROR: JWT_SECRET is not defined in environment variables.\n");
     if (process.env.NODE_ENV === 'production') {
-        process.exit(1);
+        process.exit(1); // Em produção, é crítico.
     } else {
         console.warn("JWT_SECRET não definido. Usando um segredo padrão APENAS PARA DESENVOLVIMENTO. NÃO USE EM PRODUÇÃO.");
+        // Em desenvolvimento, você poderia ter um fallback, mas é melhor definir no .env.local
+        // process.env.JWT_SECRET = "fallback_dev_secret_ بسیار_ناامن"; // Exemplo de fallback ruim
     }
 }
 
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
-const IS_FORCE_AUTH_BYPASS_ENABLED = process.env.FORCE_AUTH_BYPASS === 'true';
-
 
 export default async function handler(
   req: NextApiRequest,
@@ -51,26 +51,28 @@ export default async function handler(
       return res.status(400).json({ message: 'Tipo inválido para email ou senha.' });
   }
 
-  // Bypass específico (pode ser mantido ou removido se o bypass geral abaixo for suficiente)
-  if (IS_FORCE_AUTH_BYPASS_ENABLED && email === 'adm@example.com' && password === '123456') {
+  // Bypass de desenvolvimento (MANTIDO, mas com aviso se JWT_SECRET não estiver definido)
+  if (email === 'adm@example.com' && password === '123456' && process.env.FORCE_AUTH_BYPASS === 'true') {
       if (!JWT_SECRET) return res.status(500).json({ message: "Configuração crítica do servidor ausente (JWT_SECRET) para bypass."});
-      console.log("[BYPASS DEV] Login temporário (específico) concedido para 'adm@example.com'");
-      const bypassPayload = { userId: 1, username: 'adm_bypass_special' };
+      console.log("[BYPASS DEV] Login temporário concedido para 'adm@example.com'");
+      const bypassPayload = { userId: 1, username: 'adm_bypass' }; 
       const bypassToken = jwt.sign(bypassPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
       return res.status(200).json({
           token: bypassToken,
-          message: 'Login bem-sucedido (Bypass de Desenvolvimento Específico)',
+          message: 'Login bem-sucedido (Bypass de Desenvolvimento)',
           user: { id: bypassPayload.userId, username: bypassPayload.username, email: email }
       });
+  } else if (process.env.FORCE_AUTH_BYPASS === 'true') {
+       console.warn("[BYPASS DEV] Tentativa de login com credenciais não-bypass enquanto FORCE_AUTH_BYPASS=true. Procedendo com login normal.");
   }
 
 
-  if (!JWT_SECRET) {
+  if (!JWT_SECRET) { // Checagem final se não for bypass e JWT_SECRET ainda não estiver definido
     console.error("[API Login] ERRO CRÍTICO: JWT_SECRET não está configurado no ambiente.");
     return res.status(500).json({ message: "Erro de configuração do servidor (JWT)." });
   }
 
-  let dbPool: mysql.Pool | null = null;
+  let dbPool: mysql.Pool | null = null; 
 
   try {
     console.log("[API Login] Tentando obter pool MySQL...");
@@ -83,7 +85,7 @@ export default async function handler(
 
     const [userRows] = await dbPool.query<mysql.RowDataPacket[]>(
       'SELECT id, username, password_hash, email FROM users WHERE email = ? LIMIT 1',
-      [email.toLowerCase()]
+      [email.toLowerCase()] 
     );
 
     if (userRows.length === 0) {
@@ -92,30 +94,6 @@ export default async function handler(
     }
 
     const user = userRows[0];
-
-    // Lógica de Bypass Geral se FORCE_AUTH_BYPASS estiver ativo
-    if (IS_FORCE_AUTH_BYPASS_ENABLED) {
-        console.log(`[API Login] FORCE_AUTH_BYPASS=true. Logando usuário ${user.username} (${user.email}) sem verificação de senha.`);
-
-        // Atualizar login_count e last_login_at (assíncrono)
-        dbPool.query(
-            'UPDATE users SET login_count = COALESCE(login_count, 0) + 1, last_login_at = CURRENT_TIMESTAMP WHERE id = ?',
-            [user.id]
-        ).catch(updateError => {
-            console.error(`[API Login] Falha assíncrona ao atualizar info de login (bypass) para user ID ${user.id}:`, updateError);
-        });
-
-        const payload = { userId: user.id, username: user.username, email: user.email };
-        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-        console.log(`[API Login] Usuário '${user.username}' (ID: ${user.id}) autenticado com sucesso via BYPASS.`);
-        return res.status(200).json({
-            token: token,
-            message: 'Login bem-sucedido (Bypass de Autenticação Ativo)',
-            user: { id: user.id, username: user.username, email: user.email }
-        });
-    }
-
-    // Verificação de senha normal (se FORCE_AUTH_BYPASS não estiver ativo)
     if (!user.password_hash) {
         console.error(`[API Login] Usuário ${user.username} (email: ${user.email}) não possui password_hash no banco. Impossível verificar senha.`);
         return res.status(500).json({ message: 'Erro de configuração da conta de usuário (sem hash).' });
@@ -137,7 +115,7 @@ export default async function handler(
         console.error(`[API Login] Falha assíncrona ao atualizar info de login para user ID ${user.id}:`, updateError);
     });
 
-    const payload = { userId: user.id, username: user.username, email: user.email };
+    const payload = { userId: user.id, username: user.username, email: user.email }; // Adicionando email ao payload do JWT
     console.log(`[API Login] Gerando token JWT para usuário: ${user.username} (ID: ${user.id}) com expiração em ${JWT_EXPIRES_IN}`);
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
@@ -150,6 +128,7 @@ export default async function handler(
 
   } catch (error: any) {
     console.error('[API Login] Erro:', error);
+    // Se o erro for 'ER_BAD_FIELD_ERROR' e incluir 'password_hash', é provável que a coluna não exista.
     if (error.code === 'ER_BAD_FIELD_ERROR' && error.sqlMessage && error.sqlMessage.includes('password_hash')) {
         console.error("[API Login] ERRO CRÍTICO DE SCHEMA: A coluna 'password_hash' não foi encontrada na tabela 'users'. Verifique lib/db-mysql.ts e o schema do banco.");
         return res.status(500).json({
