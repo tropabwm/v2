@@ -4,17 +4,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label"; // Importação do Label
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { CalendarIcon, DollarSign, Link2, Percent, Briefcase, Megaphone, Users, Settings } from 'lucide-react'; // Ícones atualizados
+import { CalendarIcon, DollarSign, Link2, Percent, Briefcase, Megaphone, Users } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useToast } from "@/components/ui/use-toast"; // Importar useToast
+import { useToast } from "@/components/ui/use-toast";
 
 export interface ClientAccountOption {
   id: string;
@@ -53,7 +53,7 @@ interface CampaignManagerFormProps {
 const initialFormData: CampaignFormData = {
   name: '',
   status: 'draft',
-  selectedClientAccountId: null,
+  selectedClientAccountId: '', 
   platform: [],
   objective: [],
   ad_format: [],
@@ -76,11 +76,10 @@ const labelStyle = "text-xs text-gray-300 font-medium mb-1 block";
 const sectionTitleStyle = "text-sm font-semibold text-white flex items-center gap-2 hover:no-underline p-3 rounded-md bg-[#141414]/60 hover:bg-[#1E90FF]/10 transition-all";
 const selectContentStyle = "bg-[#1e2128] border-[#1E90FF]/30 text-white";
 
-const MOCK_PLATFORMS = [{value: 'google', label: 'Google Ads'}, {value: 'meta', label: 'Meta Ads'}, {value: 'tiktok', label: 'TikTok Ads'}, {value: 'linkedin', label: 'LinkedIn Ads'}, {value: 'manual', label: 'Manual/Outra'}];
-const MOCK_OBJECTIVES = [{value: 'vendas', label: 'Vendas'}, {value: 'leads', label: 'Leads'}, {value: 'trafego', label: 'Tráfego Site'}, {value: 'reconhecimento', label: 'Reconhecimento'}, {value: 'engajamento', label: 'Engajamento'}];
-const MOCK_AD_FORMATS = [{value: 'imagem', label: 'Imagem'}, {value: 'video', label: 'Vídeo'}, {value: 'carrossel', label: 'Carrossel'}, {value: 'texto', label: 'Anúncio Texto'}, {value: 'stories', label: 'Stories'}];
-const MOCK_STATUSES = [{value: 'draft', label: 'Rascunho'}, {value: 'active', label: 'Ativa'}, {value: 'paused', label: 'Pausada'}, {value: 'completed', label: 'Concluída'}, {value: 'archived', label: 'Arquivada'}];
-
+const PLATFORM_OPTIONS = [{value: 'google', label: 'Google Ads'}, {value: 'meta', label: 'Meta Ads'}, {value: 'tiktok', label: 'TikTok Ads'}, {value: 'linkedin', label: 'LinkedIn Ads'}, {value: 'manual', label: 'Manual/Outra'}];
+const OBJECTIVE_OPTIONS = [{value: 'vendas', label: 'Vendas'}, {value: 'leads', label: 'Leads'}, {value: 'trafego', label: 'Tráfego Site'}, {value: 'reconhecimento', label: 'Reconhecimento'}, {value: 'engajamento', label: 'Engajamento'}];
+const AD_FORMAT_OPTIONS = [{value: 'imagem', label: 'Imagem'}, {value: 'video', label: 'Vídeo'}, {value: 'carrossel', label: 'Carrossel'}, {value: 'texto', label: 'Anúncio Texto'}, {value: 'stories', label: 'Stories'}];
+const STATUS_OPTIONS_FORM = [{value: 'draft', label: 'Rascunho'}, {value: 'active', label: 'Ativa'}, {value: 'paused', label: 'Pausada'}, {value: 'completed', label: 'Concluída'}, {value: 'archived', label: 'Arquivada'}];
 
 export default function CampaignManagerForm({
   isOpen,
@@ -91,19 +90,21 @@ export default function CampaignManagerForm({
 }: CampaignManagerFormProps) {
   const [formData, setFormData] = useState<CampaignFormData>(initialFormData);
   const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast(); // Mover para dentro do corpo do componente
+  const { toast } = useToast();
 
   useEffect(() => {
+    // console.log('[CampaignManagerForm] useEffect campaignData:', campaignData, 'isOpen:', isOpen); // DEBUG
+    // console.log('[CampaignManagerForm] useEffect availableClientAccounts:', availableClientAccounts, Array.isArray(availableClientAccounts)); // DEBUG
     if (isOpen) {
       if (campaignData) {
         setFormData({
           id: campaignData.id || null,
           name: campaignData.name || '',
           status: campaignData.status || 'draft',
-          selectedClientAccountId: campaignData.selectedClientAccountId || null,
-          platform: campaignData.platform || [],
-          objective: campaignData.objective || [],
-          ad_format: campaignData.ad_format || [],
+          selectedClientAccountId: campaignData.selectedClientAccountId || '',
+          platform: Array.isArray(campaignData.platform) ? campaignData.platform : [],
+          objective: Array.isArray(campaignData.objective) ? campaignData.objective : [],
+          ad_format: Array.isArray(campaignData.ad_format) ? campaignData.ad_format : [],
           budget: campaignData.budget || '',
           daily_budget: campaignData.daily_budget || '',
           start_date: campaignData.start_date ? (isValid(campaignData.start_date) ? campaignData.start_date : (isValid(parseISO(String(campaignData.start_date))) ? parseISO(String(campaignData.start_date)) : null)) : null,
@@ -208,8 +209,9 @@ export default function CampaignManagerForm({
                             <Select value={formData.selectedClientAccountId || ''} onValueChange={(value) => handleChange('selectedClientAccountId', value)} required>
                                 <SelectTrigger id="clientAccount" className={neumorphicInputStyle}><SelectValue placeholder="Selecione a conta..." /></SelectTrigger>
                                 <SelectContent className={selectContentStyle}>
-                                    {availableClientAccounts.length === 0 && <SelectItem value="" disabled>Nenhuma conta conectada</SelectItem>}
-                                    {availableClientAccounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.platform.toUpperCase()})</SelectItem>))}
+                                    {/* DEBUG LOG: console.log('[Form Select] availableClientAccounts:', availableClientAccounts, Array.isArray(availableClientAccounts)) */}
+                                    {(!Array.isArray(availableClientAccounts) || availableClientAccounts.length === 0) && <SelectItem value="" disabled>Nenhuma conta carregada</SelectItem>}
+                                    {Array.isArray(availableClientAccounts) && availableClientAccounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.platform.toUpperCase()})</SelectItem>))}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -221,7 +223,7 @@ export default function CampaignManagerForm({
                             <Label htmlFor="status" className={labelStyle}>Status *</Label>
                             <Select value={formData.status} onValueChange={(value) => handleChange('status', value)} required>
                                 <SelectTrigger id="status" className={neumorphicInputStyle}><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                                <SelectContent className={selectContentStyle}>{MOCK_STATUSES.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
+                                <SelectContent className={selectContentStyle}>{STATUS_OPTIONS_FORM.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent>
                             </Select>
                         </div>
                          <div>
@@ -238,16 +240,16 @@ export default function CampaignManagerForm({
                      <div className="p-4 space-y-4 bg-[#0A0B0F]/30 rounded-md border border-transparent hover:border-[#1E90FF]/20 transition-colors">
                         <div>
                             <Label className={labelStyle}>Plataforma(s) de Anúncio *</Label>
-                            {renderMultiSelectButtons(MOCK_PLATFORMS, 'platform')}
+                            {renderMultiSelectButtons(PLATFORM_OPTIONS, 'platform')}
                             {formData.platform.length === 0 && <p className="text-xs text-red-400 mt-1">Selecione ao menos uma plataforma.</p>}
                         </div>
                         <div>
                             <Label className={labelStyle}>Objetivo(s) Principal(is)</Label>
-                            {renderMultiSelectButtons(MOCK_OBJECTIVES, 'objective')}
+                            {renderMultiSelectButtons(OBJECTIVE_OPTIONS, 'objective')}
                         </div>
                          <div>
                             <Label className={labelStyle}>Formato(s) de Anúncio</Label>
-                            {renderMultiSelectButtons(MOCK_AD_FORMATS, 'ad_format')}
+                            {renderMultiSelectButtons(AD_FORMAT_OPTIONS, 'ad_format')}
                         </div>
                     </div>
                   </AccordionContent>
