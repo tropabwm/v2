@@ -3,9 +3,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getDbPool } from '@/lib/db-mysql';
 import mysql from 'mysql2/promise';
 import crypto from 'crypto';
-// import { verifyToken } from '@/lib/auth'; // Descomente para autenticação real
 
-// --- Interfaces ---
 interface CampaignInput {
     name?: string;
     status?: 'active' | 'paused' | 'completed' | 'draft' | 'archived' | null;
@@ -23,7 +21,6 @@ interface CampaignInput {
     avg_ticket?: number | string | null;
     external_campaign_id?: string | null;
     user_id?: number | null;
-    // Mapeamento CamelCase
     selectedclientaccountid?: string | null;
     dailyBudget?: number | string | null;
     startDate?: string | null;
@@ -248,15 +245,7 @@ export default async function handler(
 ) {
     console.log(`[API Campaigns Handler] Method: ${req.method}, URL: ${req.url}`);
     let dbConnection: mysql.PoolConnection | null = null;
-
-    // --- AUTENTICAÇÃO ---
-    // const authUser = await verifyToken(req, res); 
-    // if (!authUser || typeof authUser.id !== 'number') {
-    //   return res.status(401).json({ message: 'Autenticação requerida ou inválida.' });
-    // }
-    // const userId = authUser.id;
-    const userId = 1; // <<<< REMOVER/SUBSTITUIR POR AUTENTICAÇÃO REAL
-    // console.log(`[API Campaigns] User ID (mock/real): ${userId}`); // Log menos verboso
+    const userId = 1; 
 
     try {
         const dbPool = getDbPool();
@@ -276,7 +265,7 @@ export default async function handler(
                 let baseSelect = 'SELECT *';
                 let baseFromWhere = 'FROM campaigns WHERE user_id = ?';
                 const queryParams: any[] = [userId];
-                const countQueryParams: any[] = [userId]; // Separado para o COUNT, pois não leva LIMIT/OFFSET
+                const countQueryParams: any[] = [userId]; 
                 
                 const whereClauses: string[] = [];
 
@@ -340,7 +329,6 @@ export default async function handler(
             const campaignDbInput = mapInputToDbFields(campaignRawInput);
             const newCampaignId = crypto.randomUUID();
 
-            // Construir a query dinamicamente para apenas incluir campos que existem em campaignDbInput
             const fieldsToInsert = ['id', 'user_id'];
             const placeholders : string[] = ['?', '?'];
             const valuesToInsert : any[] = [newCampaignId, userId];
@@ -413,7 +401,6 @@ export default async function handler(
     } finally {
         if (dbConnection) {
             dbConnection.release();
-            // console.log(`[API Campaigns ${req?.method || 'Unknown'}] Conexão com DB liberada.`); // Log menos verboso
         }
     }
 }
