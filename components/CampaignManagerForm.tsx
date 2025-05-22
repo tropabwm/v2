@@ -19,6 +19,9 @@ import { cn } from '@/lib/utils'; // Importar a função cn
 export interface ClientAccountOption {
   id: string;
   name: string;
+  // NOVAS PROPRIEDADES ADICIONADAS AQUI
+  platform: string;
+  platformAccountId: string;
 }
 
 export interface CampaignFormData {
