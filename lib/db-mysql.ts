@@ -47,8 +47,7 @@ async function executeQueryWithLogging(
     errorMessagePrefix: string = "Erro genérico de query"
 ) {
     try {
-        const paramsLog = params.length > 0 ? JSON.stringify(params).substring(0, 200) + (JSON.stringify(params).length > 200 ? "..." : "") : "[]";
-        // console.debug(`MySQL Executing: ${query.substring(0,300)}... Params: ${paramsLog}`); // Log mais verboso
+        console.debug(`MySQL Executing: ${query.substring(0,300)}... Params: ${JSON.stringify(params).substring(0,200)}`);
         const [results] = await connection.query(query, params);
         if (successMessage) console.log(`MySQL: ${successMessage}`);
         return results;
@@ -77,7 +76,7 @@ async function executeQueryWithLogging(
             console.error(`MySQL: ${errorMessagePrefix} (Código: ${error.code || 'N/A'}) ao executar query "${query.substring(0, 100)}...":`, error.message, error.sqlMessage ? `SQL Error: ${error.sqlMessage}` : '');
             throw error;
         } else {
-            console.debug(`MySQL Info: ${errorMessagePrefix} - Operação idempotente. Query: "${query.substring(0,100)}...", Código: ${error.code}.`);
+            console.debug(`MySQL Info: ${errorMessagePrefix} - Operação idempotente (item já existe ou não aplicável). Query: "${query.substring(0,100)}...", Código: ${error.code}.`);
         }
         return null;
     }
@@ -98,7 +97,7 @@ async function addColumnIfNotExists(connection: mysql.PoolConnection | mysql.Poo
                 `Erro ao adicionar coluna ${tableName}.${columnName}`
             );
         } else {
-            // console.debug(`MySQL Info: Coluna ${tableName}.${columnName} já existe.`); // Log menos verboso
+            console.debug(`MySQL Info: Coluna ${tableName}.${columnName} já existe.`);
         }
     } catch (error: any) {
         console.error(`MySQL: Falha crítica ao verificar/adicionar coluna ${tableName}.${columnName}. Erro:`, error.message);
@@ -125,7 +124,7 @@ async function addForeignKeyIfNotExists(
                 `Erro ao adicionar FK '${constraintName}' em '${tableName}'`
             );
         } else {
-            // console.debug(`MySQL Info: FK ${constraintName} em ${tableName} já existe.`); // Log menos verboso
+            console.debug(`MySQL Info: FK ${constraintName} em ${tableName} já existe.`);
         }
     } catch (error: any) {
         console.error(`MySQL: Falha crítica ao verificar/adicionar FK ${constraintName} em ${tableName}. Erro:`, error.message);
@@ -146,84 +145,66 @@ export async function initializeUsersTable(db: mysql.Pool) {
     `, [], `Tabela ${tableName} (CREATE IF NOT EXISTS) OK.`);
     await addColumnIfNotExists(db, tableName, 'login_count', 'INT DEFAULT 0');
     await addColumnIfNotExists(db, tableName, 'last_login_at', 'TIMESTAMP NULL DEFAULT NULL');
-    // console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`); // Log menos verboso
+    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
 export async function initializeCampaignsTable(db: mysql.Pool) {
     const tableName = 'campaigns';
-    // Definição CREATE TABLE IF NOT EXISTS com todas as colunas esperadas pela API
     await executeQueryWithLogging(db, `
         CREATE TABLE IF NOT EXISTS ${db.escapeId(tableName)} (
             id VARCHAR(36) PRIMARY KEY,
             user_id INT NULL,
             name VARCHAR(255) NOT NULL,
-            status ENUM('active', 'paused', 'completed', 'draft', 'archived') DEFAULT 'draft',
-            
-            selected_client_account_id VARCHAR(255) NULL,
-            external_platform_account_id VARCHAR(255) NULL,
-            platform_source VARCHAR(50) NULL,
-            external_campaign_id VARCHAR(255) NULL,
-
-            platforms JSON NULL,
-            objectives JSON NULL,
-            ad_formats JSON NULL,
-            
-            budget DECIMAL(15, 2) NULL,
-            daily_budget DECIMAL(15, 2) NULL,
+            client_name VARCHAR(255) NULL,
+            product_name VARCHAR(255) NULL,
+            objective JSON NULL,
+            target_audience TEXT NULL,
+            budget DECIMAL(15, 2) DEFAULT 0.00,
             start_date DATE NULL,
             end_date DATE NULL,
-            
-            target_audience_description TEXT NULL,
-            industry VARCHAR(255) NULL,
-            segmentation_notes TEXT NULL,
-            avg_ticket DECIMAL(15, 2) NULL,
-            
-            client_name VARCHAR(255) NULL, 
-            product_name VARCHAR(255) NULL,
+            status ENUM('active', 'paused', 'completed', 'draft', 'archived') DEFAULT 'draft',
             cost_traffic DECIMAL(15, 2) DEFAULT 0.00,
             cost_creative DECIMAL(15, 2) DEFAULT 0.00,
             cost_operational DECIMAL(15, 2) DEFAULT 0.00,
+            industry VARCHAR(255) NULL,
+            platform JSON NULL,
+            daily_budget DECIMAL(15, 2) NULL,
+            segmentation TEXT NULL,
+            ad_format JSON NULL,
             duration INT NULL,
+            avg_ticket DECIMAL(15, 2) NULL,
             purchase_frequency DECIMAL(10, 2) NULL,
             customer_lifespan INT NULL,
-            
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `, [], `Tabela ${tableName} (CREATE IF NOT EXISTS) OK.`);
 
-    // Usar addColumnIfNotExists para garantir que colunas mais antigas ou novas sejam adicionadas se não estiverem no CREATE TABLE
-    // (bom para migrações graduais, mas o CREATE TABLE acima já deve ser abrangente)
     await addColumnIfNotExists(db, tableName, 'user_id', 'INT NULL');
-    await addColumnIfNotExists(db, tableName, 'status', "ENUM('active', 'paused', 'completed', 'draft', 'archived') DEFAULT 'draft'");
-    await addColumnIfNotExists(db, tableName, 'selected_client_account_id', 'VARCHAR(255) NULL');
-    await addColumnIfNotExists(db, tableName, 'external_platform_account_id', 'VARCHAR(255) NULL');
-    await addColumnIfNotExists(db, tableName, 'platform_source', 'VARCHAR(50) NULL');
-    await addColumnIfNotExists(db, tableName, 'external_campaign_id', 'VARCHAR(255) NULL');
-    await addColumnIfNotExists(db, tableName, 'platforms', 'JSON NULL');
-    await addColumnIfNotExists(db, tableName, 'objectives', 'JSON NULL');
-    await addColumnIfNotExists(db, tableName, 'ad_formats', 'JSON NULL');
-    await addColumnIfNotExists(db, tableName, 'budget', 'DECIMAL(15, 2) NULL');
-    await addColumnIfNotExists(db, tableName, 'daily_budget', 'DECIMAL(15, 2) NULL');
-    await addColumnIfNotExists(db, tableName, 'start_date', 'DATE NULL');
-    await addColumnIfNotExists(db, tableName, 'end_date', 'DATE NULL');
-    await addColumnIfNotExists(db, tableName, 'target_audience_description', 'TEXT NULL');
-    await addColumnIfNotExists(db, tableName, 'industry', 'VARCHAR(255) NULL');
-    await addColumnIfNotExists(db, tableName, 'segmentation_notes', 'TEXT NULL');
-    await addColumnIfNotExists(db, tableName, 'avg_ticket', 'DECIMAL(15, 2) NULL');
     await addColumnIfNotExists(db, tableName, 'client_name', 'VARCHAR(255) NULL');
     await addColumnIfNotExists(db, tableName, 'product_name', 'VARCHAR(255) NULL');
+    await addColumnIfNotExists(db, tableName, 'objective', 'JSON NULL');
+    await addColumnIfNotExists(db, tableName, 'target_audience', 'TEXT NULL');
+    await addColumnIfNotExists(db, tableName, 'budget', 'DECIMAL(15, 2) DEFAULT 0.00');
+    await addColumnIfNotExists(db, tableName, 'start_date', 'DATE NULL');
+    await addColumnIfNotExists(db, tableName, 'end_date', 'DATE NULL');
+    await addColumnIfNotExists(db, tableName, 'status', "ENUM('active', 'paused', 'completed', 'draft', 'archived') DEFAULT 'draft'");
     await addColumnIfNotExists(db, tableName, 'cost_traffic', 'DECIMAL(15, 2) DEFAULT 0.00');
     await addColumnIfNotExists(db, tableName, 'cost_creative', 'DECIMAL(15, 2) DEFAULT 0.00');
     await addColumnIfNotExists(db, tableName, 'cost_operational', 'DECIMAL(15, 2) DEFAULT 0.00');
+    await addColumnIfNotExists(db, tableName, 'industry', 'VARCHAR(255) NULL');
+    await addColumnIfNotExists(db, tableName, 'platform', 'JSON NULL');
+    await addColumnIfNotExists(db, tableName, 'daily_budget', 'DECIMAL(15, 2) NULL');
+    await addColumnIfNotExists(db, tableName, 'segmentation', 'TEXT NULL');
+    await addColumnIfNotExists(db, tableName, 'ad_format', 'JSON NULL');
     await addColumnIfNotExists(db, tableName, 'duration', 'INT NULL');
+    await addColumnIfNotExists(db, tableName, 'avg_ticket', 'DECIMAL(15, 2) NULL');
     await addColumnIfNotExists(db, tableName, 'purchase_frequency', 'DECIMAL(10, 2) NULL');
     await addColumnIfNotExists(db, tableName, 'customer_lifespan', 'INT NULL');
     
-    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
+    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado com addColumnIfNotExists.`);
 }
 
-// ... (resto das funções initialize...Table como antes) ...
 export async function initializeCreativesTable(db: mysql.Pool) {
     const tableName = 'creatives';
     await executeQueryWithLogging(db, `
@@ -236,13 +217,12 @@ export async function initializeCreativesTable(db: mysql.Pool) {
             file_url VARCHAR(1024) NULL,
             content TEXT NULL,
             metrics JSON NULL,
-            status ENUM('active', 'inactive', 'draft', 'archived', 'review') DEFAULT 'draft',
+            status ENUM('active', 'inactive', 'draft', 'archived') DEFAULT 'draft',
             platform JSON NULL,
             format VARCHAR(255) NULL,
             publish_date TIMESTAMP NULL,
             originalFilename VARCHAR(255) NULL,
             comments TEXT NULL,
-            thumbnail_url VARCHAR(1024) NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -250,19 +230,19 @@ export async function initializeCreativesTable(db: mysql.Pool) {
 
     await addColumnIfNotExists(db, tableName, 'campaign_id', 'VARCHAR(36) NULL');
     await addColumnIfNotExists(db, tableName, 'user_id', 'INT NULL');
+    await addColumnIfNotExists(db, tableName, 'name', 'VARCHAR(255) NOT NULL');
     await addColumnIfNotExists(db, tableName, 'type', "ENUM('image', 'video', 'text', 'carousel', 'headline', 'body', 'cta', 'other') DEFAULT 'other'");
     await addColumnIfNotExists(db, tableName, 'file_url', 'VARCHAR(1024) NULL');
-    await addColumnIfNotExists(db, tableName, 'content', 'TEXT NULL'); 
+    await addColumnIfNotExists(db, tableName, 'content', 'TEXT NULL');
     await addColumnIfNotExists(db, tableName, 'metrics', 'JSON NULL');
-    await addColumnIfNotExists(db, tableName, 'status', "ENUM('active', 'inactive', 'draft', 'archived', 'review') DEFAULT 'draft'");
+    await addColumnIfNotExists(db, tableName, 'status', "ENUM('active', 'inactive', 'draft', 'archived') DEFAULT 'draft'");
     await addColumnIfNotExists(db, tableName, 'platform', 'JSON NULL');
     await addColumnIfNotExists(db, tableName, 'format', 'VARCHAR(255) NULL');
     await addColumnIfNotExists(db, tableName, 'publish_date', 'TIMESTAMP NULL');
     await addColumnIfNotExists(db, tableName, 'originalFilename', 'VARCHAR(255) NULL');
     await addColumnIfNotExists(db, tableName, 'comments', 'TEXT NULL');
-    await addColumnIfNotExists(db, tableName, 'thumbnail_url', 'VARCHAR(1024) NULL'); 
     
-    // console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`); // Log menos verboso
+    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
 export async function initializeFlowsTable(db: mysql.Pool) {
@@ -284,7 +264,7 @@ export async function initializeFlowsTable(db: mysql.Pool) {
     await addColumnIfNotExists(db, tableName, 'user_id', 'INT NULL');
     await addColumnIfNotExists(db, tableName, 'campaign_id', 'VARCHAR(36) DEFAULT NULL');
     await addColumnIfNotExists(db, tableName, 'elements', 'JSON DEFAULT NULL');
-    // console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
+    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
 export async function initializeCopiesTable(db: mysql.Pool) {
@@ -316,7 +296,8 @@ export async function initializeCopiesTable(db: mysql.Pool) {
     await addColumnIfNotExists(db, tableName, 'content_body', 'TEXT NULL');
     await addColumnIfNotExists(db, tableName, 'caption', 'TEXT NULL');
     await addColumnIfNotExists(db, tableName, 'copy_type', "ENUM('headline', 'body', 'cta', 'description', 'ad_copy', 'email_subject', 'social_post', 'other') DEFAULT 'other'");
-    // console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
+
+    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
 export async function initializeAlertsTable(db: mysql.Pool) {
@@ -334,7 +315,7 @@ export async function initializeAlertsTable(db: mysql.Pool) {
     `, [], `Tabela ${tableName} (CREATE IF NOT EXISTS) OK.`);
     await addColumnIfNotExists(db, tableName, 'user_id', 'INT NULL');
     await addColumnIfNotExists(db, tableName, 'campaign_id', 'VARCHAR(36) NULL');
-    // console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
+    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
 export async function initializeDailyMetricsTable(db: mysql.Pool) {
@@ -368,7 +349,8 @@ export async function initializeDailyMetricsTable(db: mysql.Pool) {
     await addColumnIfNotExists(db, tableName, 'cost', 'DECIMAL(15, 2) DEFAULT 0.00');
     await addColumnIfNotExists(db, tableName, 'revenue', 'DECIMAL(15, 2) DEFAULT 0.00');
     await addColumnIfNotExists(db, tableName, 'leads', 'INT DEFAULT 0');
-    // console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
+    
+    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
 export async function initializeMcpHistoryTable(db: mysql.Pool) {
@@ -390,7 +372,7 @@ export async function initializeMcpHistoryTable(db: mysql.Pool) {
     `, [], `Tabela ${tableName} (CREATE IF NOT EXISTS) OK.`);
     await addColumnIfNotExists(db, tableName, 'user_id', 'INT NULL');
     await addColumnIfNotExists(db, tableName, 'is_processed', 'BOOLEAN DEFAULT FALSE');
-    // console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
+    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
 export async function initializeMcpSavedConversationsTable(db: mysql.Pool) {
@@ -409,7 +391,7 @@ export async function initializeMcpSavedConversationsTable(db: mysql.Pool) {
             INDEX idx_mcp_saved_user_id (user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `, [], `Tabela ${tableName} (CREATE IF NOT EXISTS) OK.`);
-    // console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
+    console.log(`MySQL: Schema da tabela ${tableName} verificado/atualizado.`);
 }
 
 export async function initializeAllTables() {
@@ -422,8 +404,8 @@ export async function initializeAllTables() {
 
     try {
         await initializeUsersTable(currentPool);
-        await initializeCampaignsTable(currentPool); // Função atualizada
-        await initializeCreativesTable(currentPool);
+        await initializeCampaignsTable(currentPool);
+        await initializeCreativesTable(currentPool); // Chamada para a função atualizada
         await initializeFlowsTable(currentPool);
         await initializeCopiesTable(currentPool);
         await initializeAlertsTable(currentPool);
@@ -434,17 +416,23 @@ export async function initializeAllTables() {
         console.log("MySQL: Adicionando/Verificando chaves estrangeiras...");
         
         await addForeignKeyIfNotExists(currentPool, 'campaigns', 'fk_campaigns_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'creatives', 'fk_creatives_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'creatives', 'fk_creatives_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'flows', 'fk_flows_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'flows', 'fk_flows_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'copies', 'fk_copies_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'copies', 'fk_copies_creative_id', 'FOREIGN KEY (creative_id) REFERENCES creatives(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'copies', 'fk_copies_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'alerts', 'fk_alerts_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'alerts', 'fk_alerts_user_id','FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE');
+        
         await addForeignKeyIfNotExists(currentPool, 'daily_metrics', 'fk_dm_campaign_id', 'FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE');
         await addForeignKeyIfNotExists(currentPool, 'daily_metrics', 'fk_dm_user_id', 'FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
+        
         await addForeignKeyIfNotExists(currentPool, 'mcp_conversation_history', 'fk_mcp_hist_user_id','FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL');
         await addForeignKeyIfNotExists(currentPool, 'mcp_saved_conversations', 'fk_mcp_saved_user_id','FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE');
 
