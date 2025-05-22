@@ -5,7 +5,7 @@ import mysql from 'mysql2/promise';
 import crypto from 'crypto';
 // import { verifyToken } from '@/lib/auth'; // Descomente para autenticação real
 
-// --- Interfaces (como definidas anteriormente, incluindo os novos campos) ---
+// --- Interfaces ---
 interface CampaignInput {
     name?: string;
     status?: 'active' | 'paused' | 'completed' | 'draft' | 'archived' | null;
@@ -24,7 +24,7 @@ interface CampaignInput {
     external_campaign_id?: string | null;
     user_id?: number | null;
     // Mapeamento CamelCase
-    selectedclientaccountid?: string | null; // Mantido para exemplo, mas o mapeamento explícito é melhor
+    selectedclientaccountid?: string | null;
     dailyBudget?: number | string | null;
     startDate?: string | null;
     endDate?: string | null;
@@ -32,7 +32,6 @@ interface CampaignInput {
     avgTicket?: number | string | null;
     externalCampaignId?: string | null;
     segmentationNotes?: string | null;
-    // Campos do schema original que podem ainda ser enviados pelo frontend ou são legados
     clientName?: string | null;
     productName?: string | null;
     costTraffic?: number | string | null;
@@ -63,7 +62,6 @@ interface CampaignDbRecord {
     industry?: string | null;
     segmentation_notes?: string | null;
     avg_ticket?: number | null;
-    // Campos do schema original
     client_name?: string | null; 
     product_name?: string | null;
     cost_traffic?: number | null;
@@ -95,7 +93,6 @@ interface CampaignResponse {
     industry?: string | null;
     segmentationNotes?: string | null;
     avgTicket?: number | null;
-    // Campos do schema original para resposta
     clientName?: string | null;
     productName?: string | null;
     costTraffic?: number | null;
@@ -109,7 +106,6 @@ interface CampaignResponse {
     user_id?: number;
 }
 
-// Interface para a resposta da listagem paginada
 interface PaginatedCampaignResponse {
     data: CampaignResponse[];
     pagination: {
@@ -120,8 +116,6 @@ interface PaginatedCampaignResponse {
     };
 }
 
-
-// --- Helpers (toSnakeCase, CampaignDbRecordExample, campaignDbSchemaKeys) ---
 const toSnakeCase = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 
 class CampaignDbRecordExample implements Partial<CampaignDbRecord> {
@@ -134,7 +128,6 @@ class CampaignDbRecordExample implements Partial<CampaignDbRecord> {
     purchase_frequency?: any; customer_lifespan?: any; created_at?: any; updated_at?: any;
 }
 const campaignDbSchemaKeys = Object.keys(new CampaignDbRecordExample());
-
 
 const mapInputToDbFields = (input: CampaignInput): Partial<Omit<CampaignDbRecord, 'id' | 'user_id' | 'created_at' | 'updated_at'>> => {
     const dbFields: Partial<Omit<CampaignDbRecord, 'id' | 'user_id' | 'created_at' | 'updated_at'>> = {};
@@ -156,7 +149,6 @@ const mapInputToDbFields = (input: CampaignInput): Partial<Omit<CampaignDbRecord
         costTraffic: 'cost_traffic',
         costCreative: 'cost_creative',
         costOperational: 'cost_operational',
-        // Adicionar outros mapeamentos camelCase para snake_case aqui
     };
 
     for (const camelKey in camelToSnakeMapping) {
@@ -249,7 +241,6 @@ const parseDbRecordToResponse = (dbRecord: CampaignDbRecord): CampaignResponse =
         customerLifespan: customer_lifespan || null,
     };
 };
-// --- FIM dos Helpers ---
 
 export default async function handler(
     req: NextApiRequest, 
@@ -265,7 +256,7 @@ export default async function handler(
     // }
     // const userId = authUser.id;
     const userId = 1; // <<<< REMOVER/SUBSTITUIR POR AUTENTICAÇÃO REAL
-    console.log(`[API Campaigns] User ID (mock/real): ${userId}`);
+    // console.log(`[API Campaigns] User ID (mock/real): ${userId}`); // Log menos verboso
 
     try {
         const dbPool = getDbPool();
@@ -285,22 +276,25 @@ export default async function handler(
                 let baseSelect = 'SELECT *';
                 let baseFromWhere = 'FROM campaigns WHERE user_id = ?';
                 const queryParams: any[] = [userId];
+                const countQueryParams: any[] = [userId]; // Separado para o COUNT, pois não leva LIMIT/OFFSET
                 
                 const whereClauses: string[] = [];
 
                 if (status && typeof status === 'string' && status !== 'all') {
                     whereClauses.push('status = ?');
                     queryParams.push(status);
+                    countQueryParams.push(status);
                 }
                 if (selectedClientAccountId && typeof selectedClientAccountId === 'string' && selectedClientAccountId !== 'all') {
                     whereClauses.push('selected_client_account_id = ?');
                     queryParams.push(selectedClientAccountId);
+                    countQueryParams.push(selectedClientAccountId);
                 }
                 if (search && typeof search === 'string' && search.trim() !== '') {
                     const searchTerm = `%${search.trim()}%`;
-                    // Ajustar os campos de busca conforme necessário
                     whereClauses.push('(name LIKE ? OR industry LIKE ? OR client_name LIKE ? OR external_campaign_id LIKE ?)'); 
                     queryParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
+                    countQueryParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
                 }
 
                 if (whereClauses.length > 0) {
@@ -308,7 +302,7 @@ export default async function handler(
                 }
 
                 const countSql = `SELECT COUNT(*) as total ${baseFromWhere}`;
-                const [countRows] = await dbConnection.query<mysql.RowDataPacket[]>(countSql, queryParams);
+                const [countRows] = await dbConnection.query<mysql.RowDataPacket[]>(countSql, countQueryParams);
                 const totalItems = countRows[0].total || 0;
 
                 const allowedSortColumns = ['name', 'status', 'created_at', 'start_date', 'daily_budget', 'budget'];
@@ -346,15 +340,20 @@ export default async function handler(
             const campaignDbInput = mapInputToDbFields(campaignRawInput);
             const newCampaignId = crypto.randomUUID();
 
-            const fieldsToInsert = ['id', 'user_id', ...Object.keys(campaignDbInput)];
-            const placeholders = fieldsToInsert.map(() => '?').join(', ');
+            // Construir a query dinamicamente para apenas incluir campos que existem em campaignDbInput
+            const fieldsToInsert = ['id', 'user_id'];
+            const placeholders : string[] = ['?', '?'];
+            const valuesToInsert : any[] = [newCampaignId, userId];
+
+            for (const key in campaignDbInput) {
+                if (Object.prototype.hasOwnProperty.call(campaignDbInput, key) && (campaignDbInput as any)[key] !== undefined) {
+                    fieldsToInsert.push(key);
+                    placeholders.push('?');
+                    valuesToInsert.push((campaignDbInput as any)[key]);
+                }
+            }
             
-            const valuesToInsert = [newCampaignId, userId];
-            Object.keys(campaignDbInput).forEach(key => {
-                valuesToInsert.push((campaignDbInput as any)[key]);
-            });
-            
-            const sql = `INSERT INTO campaigns (${fieldsToInsert.map(f => `\`${f}\``).join(', ')}) VALUES (${placeholders})`;
+            const sql = `INSERT INTO campaigns (${fieldsToInsert.map(f => `\`${f}\``).join(', ')}) VALUES (${placeholders.join(', ')})`;
             
             await dbConnection.query(sql, valuesToInsert);
 
@@ -389,7 +388,6 @@ export default async function handler(
             if (updatedCampaignRows.length > 0) {
                 return res.status(200).json(parseDbRecordToResponse(updatedCampaignRows[0] as CampaignDbRecord));
             } else {
-                // Isso pode acontecer se a campanha existir mas não pertencer ao user_id, ou algum outro erro
                 return res.status(404).json({ message: 'Campanha não encontrada ou não pôde ser atualizada.' });
             }
         }
@@ -398,8 +396,6 @@ export default async function handler(
             if (!id || typeof id !== 'string') {
                 return res.status(400).json({ message: 'ID da campanha é obrigatório.' });
             }
-            // Adicionar lógica para deletar de tabelas relacionadas se não houver ON DELETE CASCADE configurado no DB
-            // Ex: await dbConnection.query('DELETE FROM daily_metrics WHERE campaign_id = ? AND user_id = ?', [id, userId]);
             const [result] = await dbConnection.query<mysql.ResultSetHeader>('DELETE FROM campaigns WHERE id = ? AND user_id = ?', [id, userId]);
             if (result.affectedRows === 0) {
                 return res.status(404).json({ message: 'Campanha não encontrada para exclusão.' });
@@ -413,12 +409,11 @@ export default async function handler(
 
     } catch (err: any) {
         console.error(`[API Campaigns ${req?.method || 'Unknown'}] Erro GERAL no try/catch:`, err.message, err.stack, err.code, err.sqlMessage);
-        // Resposta de erro corrigida
         return res.status(500).json({ message: `Erro interno do servidor: ${err?.message || 'Erro desconhecido.'}${err?.code ? ` (Código: ${err.code})` : ''}` });
     } finally {
         if (dbConnection) {
             dbConnection.release();
-            console.log(`[API Campaigns ${req?.method || 'Unknown'}] Conexão com DB liberada.`);
+            // console.log(`[API Campaigns ${req?.method || 'Unknown'}] Conexão com DB liberada.`); // Log menos verboso
         }
     }
 }
