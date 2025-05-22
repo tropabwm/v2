@@ -38,7 +38,6 @@ export interface CampaignFormData {
   segmentation_notes: string;
   avg_ticket: number;
   external_campaign_id: string;
-  // PROPRIEDADES ADICIONADAS AQUI
   platform_source: string; // Adicionado
   external_platform_account_id: string; // Adicionado
 }
@@ -205,7 +204,8 @@ const CampaignManagerForm: React.FC<CampaignManagerFormProps> = ({
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="selectedClientAccountId" className="text-right text-gray-300">Conta de Cliente</Label>
                     <Select name="selectedClientAccountId" value={formData.selectedClientAccountId} onValueChange={(val) => handleSelectChange('selectedClientAccountId', val)}>
-                      <SelectTrigger className="col-span-3 bg-[#2a2d34] border border-[#3a3d44] text-gray-100 focus-visible:ring-neon-blue" required>
+                      {/* REMOVIDA A PROP 'required' */}
+                      <SelectTrigger className="col-span-3 bg-[#2a2d34] border border-[#3a3d44] text-gray-100 focus-visible:ring-neon-blue">
                         <SelectValue placeholder="Selecione uma conta" />
                       </SelectTrigger>
                       <SelectContent className="bg-[#2a2d34] border border-[#3a3d44] text-gray-100">
